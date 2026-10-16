@@ -1,0 +1,31 @@
+[project]
+name = "workflow"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "anthropic>=1.15.0",
+    "icalendar>=7.3.0",
+    "pydantic>=2.14.1",
+    "python-dotenv>=1.2.4",
+    "tzlocal>=5.4.4",
+]
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.414",
+    "pytest>=9.1.1",
+    "ruff>=0.17.1",
+]
+
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]  # the formatter wraps code; prompt text stays one line per paragraph
+
+[tool.pyright]
+include = ["importer", "rearrange", "tests"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

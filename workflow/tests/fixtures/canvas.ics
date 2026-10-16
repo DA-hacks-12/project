@@ -1,0 +1,74 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:icalendar-ruby
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Sample Student Calendar (Canvas)
+X-WR-CALDESC:Calendar events for the user\, Sample Student
+BEGIN:VEVENT
+DTSTAMP:20261003T004800Z
+UID:event-assignment-101
+DTSTART;VALUE=DATE;VALUE=DATE:20261020
+CLASS:PUBLIC
+DESCRIPTION:Write a 1\,200-word essay.\n\nCite three sources.
+SEQUENCE:0
+SUMMARY:✏️ Essay #2 [F26 ENGL C1000 47Y Academic Reading And Writing]
+URL;VALUE=URI:https://school.instructure.com/calendar?include_contexts=cour
+ se_48180&month=10&year=2026#assignment_101
+X-ALT-DESC;FMTTYPE=text/html:<p>Write a 1\,200-word essay.</p>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261003T004800Z
+UID:event-assignment-102
+DTSTART:20261021T213000Z
+DTEND:20261021T213000Z
+CLASS:PUBLIC
+SEQUENCE:0
+SUMMARY:In-Class Quiz [F26 PSYC D024 01Z\, 50Z\, 51Z Intro Psychobiology]
+URL;VALUE=URI:https://school.instructure.com/calendar?include_contexts=cour
+ se_47775&month=10&year=2026#assignment_102
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261003T004800Z
+UID:event-assignment-103
+DTSTART;VALUE=DATE;VALUE=DATE:20260922
+CLASS:PUBLIC
+SEQUENCE:0
+SUMMARY:Ice Breaker [F26 ANTH D001L Phys Anthro Lab]
+URL;VALUE=URI:https://school.instructure.com/calendar?include_contexts=cour
+ se_46994&month=09&year=2026#assignment_103
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261003T004800Z
+UID:event-calendar-event-5
+DTSTART:20261019T170000Z
+DTEND:20261019T183000Z
+CLASS:PUBLIC
+SEQUENCE:0
+SUMMARY:Office Hours [F26 PHIL D001 Intro To Philosophy]
+URL;VALUE=URI:https://school.instructure.com/calendar?include_contexts=cour
+ se_47134&month=10&year=2026#calendar_event_5
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261003T004800Z
+UID:event-assignment-override-77
+DTSTART;VALUE=DATE:20261025
+CLASS:PUBLIC
+SEQUENCE:0
+SUMMARY:paper (Extension) [F26 PHIL D001 Intro To Philosophy]
+URL;VALUE=URI:https://school.instructure.com/calendar?include_contexts=cour
+ se_47134&month=10&year=2026#assignment_104
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20261003T004800Z
+UID:event-sub-assignment-9
+DTSTART;VALUE=DATE:20261019
+CLASS:PUBLIC
+DESCRIPTION:Reply to two classmates.
+SEQUENCE:0
+SUMMARY:Discussion #2 Required Replies (2) [F26 PSYC D024 Intro Psychobiolo
+ gy]
+URL;VALUE=URI:https://school.instructure.com/calendar?include_contexts=cour
+ se_47775&month=10&year=2026#assignment_105
+END:VEVENT
+END:VCALENDAR
