@@ -1,0 +1,29 @@
+.bars {
+  display: grid;
+  grid-template-columns: repeat(24, 1fr);
+  align-items: end;
+  gap: 2px;
+  height: 56px;
+}
+
+.bar {
+  display: block;
+  background: var(--grass-8);
+  border-radius: 1px;
+}
+
+.page {
+  max-width: 640px;
+}
+
+/* Big type sits on its ink, not its box: pull the side bearing back. */
+.big {
+  margin-left: -0.045em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Default hours, not learned: the same bars, quieter. */
+.quiet {
+  background: var(--gray-a6);
+}

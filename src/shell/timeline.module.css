@@ -1,0 +1,42 @@
+.scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.track {
+  position: relative;
+  min-height: 140px;
+}
+
+.tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--gray-a3);
+}
+
+.tick span {
+  position: absolute;
+  top: 8px;
+  left: 6px;
+  color: var(--gray-10);
+  font-size: var(--font-size-1);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 2px solid var(--tomato-9);
+  z-index: 1;
+}
+
+.slot {
+  position: absolute;
+  height: 68px;
+}

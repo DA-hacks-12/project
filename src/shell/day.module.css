@@ -1,0 +1,21 @@
+/* Big type sits on its ink, not its box: pull the side bearing back. */
+.big {
+  margin-left: -0.045em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.clock {
+  color: var(--gray-10);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.progress {
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  max-width: 520px;
+  margin-top: 12vh;
+}

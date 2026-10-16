@@ -1,0 +1,152 @@
+.block {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  height: 100%;
+  width: 100%;
+  padding: 6px 8px;
+  border-left: 3px solid;
+  border-radius: var(--radius-2);
+  overflow: hidden;
+  cursor: pointer;
+  color: var(--gray-12);
+  font-size: var(--font-size-1);
+  line-height: var(--line-height-1);
+}
+
+.block:focus-visible,
+.due:focus-visible {
+  outline: 2px solid var(--focus-8);
+  outline-offset: 2px;
+}
+
+.compact {
+  padding: 3px 6px;
+  gap: 0;
+}
+
+.time {
+  color: var(--gray-11);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.title {
+  overflow: hidden;
+  font-size: var(--font-size-2);
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.compact .title {
+  font-size: var(--font-size-1);
+}
+
+.sub {
+  overflow: hidden;
+  color: var(--gray-11);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.deep {
+  background: var(--grass-a4);
+  border-color: var(--grass-9);
+}
+.deep:hover {
+  background: var(--grass-a5);
+}
+
+.light {
+  background: var(--grass-a2);
+  border-color: var(--grass-7);
+}
+.light:hover {
+  background: var(--grass-a3);
+}
+
+.break {
+  background: var(--amber-a3);
+  border-color: var(--amber-9);
+}
+.break:hover {
+  background: var(--amber-a4);
+}
+
+.event {
+  background: var(--gray-a3);
+  border-color: var(--gray-9);
+}
+.event:hover {
+  background: var(--gray-a4);
+}
+
+.idea {
+  border: 1px dashed var(--jade-8);
+  border-left: 3px solid var(--jade-8);
+  color: var(--jade-11);
+}
+.idea:hover {
+  background: var(--jade-a2);
+}
+.idea .time {
+  color: var(--jade-11);
+}
+
+.done {
+  opacity: 0.6;
+}
+.done .title {
+  text-decoration: line-through;
+}
+
+.due {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  max-width: 260px;
+  padding: 3px 8px;
+  border: 1px solid var(--tomato-7);
+  border-radius: var(--radius-2);
+  color: var(--tomato-11);
+  cursor: pointer;
+  font-size: var(--font-size-1);
+}
+.due:hover {
+  background: var(--tomato-a2);
+}
+.due .title {
+  font-size: var(--font-size-1);
+}
+
+.list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+/* In the week grid's all-day row a chip keeps to its day's column. */
+.fill {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* The model is still reading this assignment: a slow, quiet pulse. */
+.reading {
+  animation: reading var(--reading-pulse) var(--ease-calm) infinite;
+}
+
+@keyframes reading {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reading {
+    animation: none;
+    opacity: 0.6;
+  }
+}

@@ -1,8 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Project",
-  "version": "0.1.0",
-  "permissions": ["history", "downloads"],
+  "version": "0.3.0",
+  "permissions": ["history", "downloads", "declarativeNetRequest", "alarms"],
   "background": { "service_worker": "background.js", "type": "module" },
+  "content_scripts": [
+    {
+      "matches": ["http://localhost:3000/*", "http://127.0.0.1:3000/*"],
+      "js": ["content.js"]
+    }
+  ],
   "action": {}
 }

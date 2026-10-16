@@ -1,0 +1,34 @@
+/* Tokens come from Radix Themes (grass on sage). These rules keep the look
+   flat: floating cards get a hairline instead of a shadow, hover is a tint. */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+.radix-themes {
+  /* Motion: every duration and curve lives here. */
+  --ease-calm: cubic-bezier(0.4, 0, 0.2, 1);
+  --reading-pulse: 1.6s;
+  --reading-sweep: 1.4s;
+  --progress-move: 400ms;
+
+  --hairline: var(--gray-a5);
+  --quiet: var(--gray-11);
+  --faint: var(--gray-9);
+}
+
+.rt-PopoverContent,
+.rt-DialogContent {
+  box-shadow: none;
+  border: 1px solid var(--gray-a6);
+}
+
+:where(a) {
+  color: inherit;
+}
+
+:where(button) {
+  font: inherit;
+}

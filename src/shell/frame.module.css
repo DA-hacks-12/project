@@ -1,0 +1,30 @@
+.app {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  height: 100vh;
+  background: var(--color-background);
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: stretch;
+  padding: 20px 12px;
+  border-right: 1px solid var(--hairline);
+}
+
+.item {
+  justify-content: flex-start;
+  margin: 0;
+}
+
+.add {
+  align-self: center;
+}
+
+.main {
+  min-width: 0;
+  overflow: auto;
+  padding: 28px 36px 36px;
+}

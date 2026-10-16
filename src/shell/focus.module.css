@@ -1,0 +1,30 @@
+.screen {
+  position: relative;
+  min-height: 100vh;
+  padding: 48px;
+  background: var(--color-background);
+}
+
+.clock {
+  font-size: 128px;
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.notes {
+  position: absolute;
+  bottom: 32px;
+  left: 40px;
+}
+
+.lofi {
+  position: absolute;
+  right: 32px;
+  bottom: 32px;
+  width: 256px;
+  height: 144px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-2);
+}

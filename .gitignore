@@ -6,3 +6,10 @@ node_modules/
 # Keys stay local
 .env*
 !.env.example
+
+# Build artifacts
+*.tsbuildinfo
+
+# Browser test output, and the one-time session handoff
+.e2e-ui/
+HANDOFF.md

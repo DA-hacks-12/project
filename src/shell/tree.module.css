@@ -1,0 +1,20 @@
+.tree {
+  display: block;
+  width: 100%;
+  height: 72px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-2);
+  background: var(--sky-a2);
+}
+
+.hill {
+  fill: var(--grass-a5);
+}
+
+.trunk {
+  fill: var(--brown-9);
+}
+
+.leaves {
+  fill: var(--jade-9);
+}

@@ -1,0 +1,20 @@
+.screen {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  background: var(--color-background);
+}
+
+.box {
+  width: 100%;
+  max-width: 360px;
+  margin-top: -8vh;
+}
+
+/* Big type sits on its ink, not its box: pull the side bearing back. */
+.title {
+  margin-left: -0.045em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}

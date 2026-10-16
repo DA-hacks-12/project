@@ -1,0 +1,44 @@
+/* Reading progress under a school: the bar grows as readings land, and a
+   quiet sweep shows the model is at work even before the first one does. */
+.track {
+  position: relative;
+  overflow: hidden;
+  width: 180px;
+  height: 3px;
+  margin-top: 6px;
+  border-radius: 2px;
+  background: var(--gray-a3);
+}
+
+.bar {
+  position: absolute;
+  inset: 0;
+  background: var(--grass-9);
+  transform-origin: left;
+  transition: transform var(--progress-move) var(--ease-calm);
+}
+
+.track::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 35%;
+  background: var(--grass-a6);
+  animation: sweep var(--reading-sweep) var(--ease-calm) infinite;
+}
+
+@keyframes sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .track::after {
+    animation: none;
+    display: none;
+  }
+}
