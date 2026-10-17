@@ -1,4 +1,4 @@
-# Day planner for Canvas
+# Pedantic - Day planner for Canvas
 
 A biology & psychology-backed college coursework planner. It learns your sleep rhythm, puts hard work in peak hours, replans guilt-free, locks out distractions, and restores attention outdoors.
 
