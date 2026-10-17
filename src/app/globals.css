@@ -136,3 +136,8 @@ body {
 .map-preview.rt-PopperContent[data-state="closed"] {
   animation-name: rt-fade-out;
 }
+
+/* Closed by a scroll: gone at once, so it never moves as it fades. */
+.map-preview-scrolled.rt-PopperContent[data-state="closed"] {
+  animation-name: none;
+}

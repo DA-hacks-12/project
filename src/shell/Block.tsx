@@ -12,7 +12,7 @@ import {
 } from "@radix-ui/themes";
 import dynamic from "next/dynamic";
 import NextLink from "next/link";
-import { type CSSProperties, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import { Temporal } from "temporal-polyfill";
 import { clock, clockRange, duration, shortDate, zoned } from "@/lib/time";
 import { bodyClockOf } from "@/modules/arrange/core/body-clock";
@@ -419,12 +419,28 @@ function MapPreview({
   children: React.ReactNode;
 }) {
   const [hover, setHover] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const open = hover && !hidden;
+  // Any scroll closes it at once (no fade), so it never chases its block or
+  // flips sides.
+  useEffect(() => {
+    if (!open) return;
+    const close = () => {
+      setScrolled(true);
+      setHover(false);
+    };
+    window.addEventListener("scroll", close, { capture: true, passive: true });
+    return () => window.removeEventListener("scroll", close, { capture: true });
+  }, [open]);
   if (!place.from) return children;
   return (
     // A moment's rest on the block opens it, so passing over doesn't.
     <HoverCard.Root
-      open={hover && !hidden}
-      onOpenChange={setHover}
+      open={open}
+      onOpenChange={(value) => {
+        if (value) setScrolled(false);
+        setHover(value);
+      }}
       openDelay={500}
       closeDelay={150}
     >
@@ -432,7 +448,7 @@ function MapPreview({
       <HoverCard.Content
         width="320px"
         size="1"
-        className={`${styles.preview} map-preview`}
+        className={`${styles.preview} map-preview ${scrolled ? "map-preview-scrolled" : ""}`}
         side="top"
         align="start"
         sideOffset={6}
