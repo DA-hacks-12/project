@@ -15,13 +15,15 @@ const Body = z.object({
     .regex(/^\d{1,2}:\d{2}$/)
     .optional(),
   scope: z.union([
-    z.enum(["hour", "day", "week"]),
+    z.enum(["day", "week"]),
     z.object({
       kind: z.literal("clash"),
       start: z.iso.datetime({ offset: true }),
       end: z.iso.datetime({ offset: true }),
     }),
   ]),
+  // With Day: which of the plan's days (today when missing).
+  day: z.iso.date().optional(),
   answer: z.string().max(500).optional(),
   dismiss: z.uuid().optional(),
 });
@@ -44,12 +46,17 @@ export async function POST(request: Request) {
     const set = atClock(zoned(now, settings?.time_zone ?? "UTC"), body.data.at);
     if (set) now = new Date(set.epochMilliseconds);
   }
-  const { scope, answer, dismiss } = body.data;
+  const { scope, day, answer, dismiss } = body.data;
   try {
     // Advice is extra: if it fails, the reschedule still answers, without it.
     const [result, advice] = await Promise.all([
       reschedule(supabase, now, {
-        scope: typeof scope === "string" ? { kind: scope } : scope,
+        scope:
+          scope === "day"
+            ? { kind: "day", date: day }
+            : typeof scope === "string"
+              ? { kind: scope }
+              : scope,
         answer,
         dismiss,
       }),

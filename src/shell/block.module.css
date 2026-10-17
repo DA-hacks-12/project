@@ -188,6 +188,12 @@
 }
 
 .previewLabel {
-  margin: 0;
-  padding: 9px 12px;
+  padding: 10px 12px;
+}
+
+.previewName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

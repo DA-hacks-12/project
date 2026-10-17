@@ -3,26 +3,32 @@ import { Temporal } from "temporal-polyfill";
 // Two made-up schools, written the way Canvas writes its calendar feed, with
 // dates relative to today so the data never goes stale. For tests and demos:
 // /mock/state.ics and /mock/college.ics. Everything upcoming falls in this
-// calendar week (through Saturday), so the week's plan shows all of it: the
-// entries are written over ten days and squeezed, in order, into the days left.
-
-/** The entries' days run 0 to 9. */
-const WRITTEN_OVER = 10;
+// calendar week and the next (through Saturday of next week), the span a plan
+// covers: the entries are written over two weeks from a Sunday; today's stay
+// today, and the rest are spread evenly, in order, over tomorrow through next
+// Saturday, so no day is crowded whatever day it is. What was due earlier
+// this week is in the feed too, as in Canvas. These schools are demo data, so
+// their import brings this week so far in as done (`isMockSchool`).
 
 interface Entry {
   uid: string;
   title: string;
   course: string;
   courseId: number;
-  day: number; // days from today, over ten days (squeezed into this week)
+  day: number; // days from today, written over two weeks (0 to 13); sets the order
   at?: string; // local "HH:MM"; all-day (due 11:59pm) when missing
   minutes?: number; // calendar events only
   text?: string;
 }
 
+/** Due earlier this week: in the feed once it's past. */
+export interface Earlier extends Omit<Entry, "day" | "minutes"> {
+  weekday: number; // 0 Sunday … 5 Friday
+}
+
 export const SCHOOLS: Record<
   string,
-  { host: string; name: string; entries: Entry[] }
+  { host: string; name: string; entries: Entry[]; earlier: Earlier[] }
 > = {
   state: {
     host: "mockstate.instructure.com",
@@ -96,7 +102,7 @@ export const SCHOOLS: Record<
         title: "Problem Set 3",
         course: "PHYS 2A",
         courseId: 5101,
-        day: -3,
+        day: -8, // always before this week
         text: "Already past: never imported.",
       },
       {
@@ -167,6 +173,146 @@ export const SCHOOLS: Record<
         at: "18:00",
         text: "In-person midterm covering Chapters 1-7. Bring a #2 pencil and your student ID.",
       },
+      {
+        uid: "event-assignment-130",
+        title: "Problem Set 5: Forces",
+        course: "PHYS 2A",
+        courseId: 5101,
+        day: 10,
+        text: "Problems 1-10 from Chapter 4 (Newton's laws). Draw a free-body diagram for every problem.\n\nUpload one PDF to Canvas.",
+      },
+      {
+        uid: "event-sub-assignment-203",
+        title: "Discussion 7: Reply to Topic",
+        course: "PSYC 1",
+        courseId: 5103,
+        day: 11,
+        text: "Post a 200-word response: which learning principle from Chapter 7 explains a habit you have? Then reply to two classmates.",
+      },
+      {
+        uid: "event-assignment-133",
+        title: "Reading Quiz 6",
+        course: "PSYC 1",
+        courseId: 5103,
+        day: 11,
+        at: "20:00",
+        text: "10 multiple-choice questions on Chapter 7 (Learning). 20 minutes, one attempt.",
+      },
+      {
+        uid: "event-assignment-131",
+        title: "WebAssign 5.1: Antiderivatives",
+        course: "MATH 1A",
+        courseId: 5105,
+        day: 12,
+        text: "18 problems in WebAssign on antiderivatives and initial value problems. Five tries per problem.",
+      },
+      {
+        uid: "event-assignment-134",
+        title: "Read Chapter 10: Photosynthesis",
+        course: "BIOL 11",
+        courseId: 5104,
+        day: 12,
+        text: "Read Chapter 10 and answer the 6 guided-reading questions at the end. Submit as a PDF.",
+      },
+      {
+        uid: "event-assignment-132",
+        title: "Essay 2: Final Draft",
+        course: "ENGL 1A",
+        courseId: 5102,
+        day: 13,
+        text: "Revise your argument analysis using the peer review comments. 1,200-1,500 words, MLA format, with a works cited page. Submit through Turnitin.",
+      },
+    ],
+    earlier: [
+      {
+        uid: "event-assignment-90",
+        title: "Discussion 5: Reply to Topic",
+        course: "PSYC 1",
+        courseId: 5103,
+        weekday: 0,
+        text: "Post a 200-word response on one sleep study from Chapter 5.",
+      },
+      {
+        uid: "event-assignment-91",
+        title: "WebAssign 4.2: Implicit Differentiation",
+        course: "MATH 1A",
+        courseId: 5105,
+        weekday: 1,
+        text: "16 problems on implicit differentiation. Five tries per problem.",
+      },
+      {
+        uid: "event-assignment-92",
+        title: "Reading Quiz 4",
+        course: "PSYC 1",
+        courseId: 5103,
+        weekday: 1,
+        at: "20:00",
+        text: "10 multiple-choice questions on Chapter 5 (Consciousness). 20 minutes, one attempt.",
+      },
+      {
+        uid: "event-assignment-93",
+        title: "Lab Report 2: Free Fall",
+        course: "PHYS 2A",
+        courseId: 5101,
+        weekday: 2,
+        text: "Write up the free-fall lab: data table, one graph, error analysis and conclusion. 3-5 pages.",
+      },
+      {
+        uid: "event-assignment-94",
+        title: "Read Chapter 8: Energy and Enzymes",
+        course: "BIOL 11",
+        courseId: 5104,
+        weekday: 2,
+        text: "Read pages 180-204 and take notes.",
+      },
+      {
+        uid: "event-assignment-95",
+        title: "Essay 2: Thesis and Outline",
+        course: "ENGL 1A",
+        courseId: 5102,
+        weekday: 3,
+        text: "Submit a thesis statement and a one-page outline for Essay 2.",
+      },
+      {
+        uid: "event-sub-assignment-96",
+        title: "Discussion 5: Required Replies (2)",
+        course: "PSYC 1",
+        courseId: 5103,
+        weekday: 3,
+        text: "Reply to two classmates, at least 50 words each.",
+      },
+      {
+        uid: "event-assignment-97",
+        title: "WebAssign 4.1: The Chain Rule",
+        course: "MATH 1A",
+        courseId: 5105,
+        weekday: 4,
+        text: "14 problems on the chain rule.",
+      },
+      {
+        uid: "event-assignment-98",
+        title: "Pre-lab Quiz: Respiration",
+        course: "BIOL 11",
+        courseId: 5104,
+        weekday: 4,
+        at: "21:00",
+        text: "Five questions on the respiration lab. 10 minutes.",
+      },
+      {
+        uid: "event-assignment-99",
+        title: "Week 7 Check-In",
+        course: "PHYS 2A",
+        courseId: 5101,
+        weekday: 5,
+      },
+      {
+        uid: "event-assignment-100",
+        title: "Annotated Sources",
+        course: "ENGL 1A",
+        courseId: 5102,
+        weekday: 5,
+        text: "Find three scholarly sources for Essay 2 and write a short annotation for each.",
+      },
     ],
   },
   college: {
@@ -207,9 +353,65 @@ export const SCHOOLS: Record<
         day: 2,
         text: "Ten gesture drawings from life, 2 minutes each.",
       },
+      {
+        uid: "event-assignment-112",
+        title: "Spanish Homework 8",
+        course: "SPAN 2",
+        courseId: 77,
+        day: 10,
+        text: "Workbook pages 61-64: the preterite and the imperfect.",
+      },
+      {
+        uid: "event-assignment-113",
+        title: "Sketchbook Week 10",
+        course: "ART 10",
+        courseId: 78,
+        day: 12,
+        text: "Five gesture drawings and one 30-minute study of a hand.",
+      },
+    ],
+    earlier: [
+      {
+        uid: "event-assignment-104",
+        title: "Spanish Homework 6",
+        course: "SPAN 2",
+        courseId: 77,
+        weekday: 1,
+        text: "Workbook pages 78-80 (the preterite). Photograph and upload.",
+      },
+      {
+        uid: "event-assignment-105",
+        title: "Sketchbook Week 8",
+        course: "ART 10",
+        courseId: 78,
+        weekday: 3,
+        text: "Ten gesture drawings from life, 2 minutes each.",
+      },
+      {
+        uid: "event-assignment-106",
+        title: "Vocab Quiz 3",
+        course: "SPAN 2",
+        courseId: 77,
+        weekday: 4,
+        at: "19:30",
+        text: "25 vocabulary words from Unidad 3. 15 minutes.",
+      },
     ],
   },
 };
+
+/** The mock schools are demo data: their import brings this week so far in, done. */
+export function isMockSchool(host: string): boolean {
+  return Object.values(SCHOOLS).some((school) => school.host === host);
+}
+
+/** What was due earlier this week, before today (none on a Sunday). */
+export function earlierThisWeek(
+  school: keyof typeof SCHOOLS,
+  today: Temporal.PlainDate,
+): Earlier[] {
+  return SCHOOLS[school].earlier.filter((e) => e.weekday < today.dayOfWeek % 7);
+}
 
 const stamp = (at: Temporal.ZonedDateTime) =>
   `${at.toInstant().toString().replace(/[-:]/g, "").replace(/\.\d+/, "").slice(0, 15)}Z`;
@@ -239,6 +441,13 @@ export function mockFeed(
   tz: string,
 ): string {
   const { host, name, entries } = SCHOOLS[school];
+  // Earlier this week first, as days before today, then what's ahead.
+  const past: Entry[] = earlierThisWeek(school, today).map(
+    ({ weekday, ...entry }) => ({
+      ...entry,
+      day: weekday - (today.dayOfWeek % 7),
+    }),
+  );
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -248,10 +457,17 @@ export function mockFeed(
     `X-WR-CALNAME:Mock Student Calendar (${icsText(name)})`,
   ];
   const now = Temporal.Now.zonedDateTimeISO(tz);
-  const left = 7 - (today.dayOfWeek % 7); // today through Saturday
-  for (const entry of entries) {
+  const left = 14 - (today.dayOfWeek % 7); // today through next Saturday
+  const later = entries
+    .filter((e) => e.day > 0)
+    .sort((a, b) => a.day - b.day)
+    .map((e) => e.uid);
+  for (const entry of [...past, ...entries]) {
     const day =
-      entry.day < 0 ? entry.day : Math.floor((entry.day * left) / WRITTEN_OVER);
+      entry.day <= 0
+        ? entry.day
+        : 1 +
+          Math.floor((later.indexOf(entry.uid) * (left - 1)) / later.length);
     const date = today.add({ days: day });
     const kind = entry.uid.startsWith("event-calendar-event")
       ? "calendar_event"

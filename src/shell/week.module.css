@@ -26,3 +26,36 @@
 .placeholder {
   min-height: 70vh;
 }
+
+/* The student's sharpest hours: a faint field behind each day's blocks. */
+.calendar .sharp {
+  background-color: color-mix(in srgb, var(--ink) 6%, transparent);
+  opacity: 1;
+}
+
+/* The wave over the days being replanned: each day's column lights a beat
+   after the one before (motion in globals.css). */
+.calendar .wave {
+  background-color: var(--ink);
+}
+.calendar .wave0 {
+  animation-delay: calc(var(--replan-step) * 0);
+}
+.calendar .wave1 {
+  animation-delay: calc(var(--replan-step) * 3);
+}
+.calendar .wave2 {
+  animation-delay: calc(var(--replan-step) * 6);
+}
+.calendar .wave3 {
+  animation-delay: calc(var(--replan-step) * 9);
+}
+.calendar .wave4 {
+  animation-delay: calc(var(--replan-step) * 12);
+}
+.calendar .wave5 {
+  animation-delay: calc(var(--replan-step) * 15);
+}
+.calendar .wave6 {
+  animation-delay: calc(var(--replan-step) * 18);
+}

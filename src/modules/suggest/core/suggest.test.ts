@@ -1,15 +1,25 @@
 import { expect, test } from "vitest";
 import { zoned } from "@/lib/time";
-import { checkPick } from "./rest";
+import { checkPick, lastNap } from "./rest";
 
 const TZ = "America/Los_Angeles";
 const AFTERNOON = zoned("2026-10-16T22:00:00Z", TZ); // 3pm
 
-test("no break for vague answers or evening naps; lengths held to the research", () => {
+test("no break for vague answers or naps near bedtime; lengths held to the research", () => {
   expect(checkPick({ kind: "none", minutes: 10 }, AFTERNOON)).toBeNull();
+  // Asleep around 11pm (the default): no naps from 4pm.
   expect(
-    checkPick({ kind: "nap", minutes: 20 }, AFTERNOON.with({ hour: 19 })),
+    checkPick({ kind: "nap", minutes: 20 }, AFTERNOON.with({ hour: 16 })),
   ).toBeNull();
+  // Asleep around 1:30am: a nap at 6pm is still fine, at 7pm it isn't.
+  expect(
+    checkPick({ kind: "nap", minutes: 20 }, AFTERNOON.with({ hour: 18 }), 90),
+  ).not.toBeNull();
+  expect(
+    checkPick({ kind: "nap", minutes: 20 }, AFTERNOON.with({ hour: 19 }), 90),
+  ).toBeNull();
+  expect(lastNap(90)).toBe(18 * 60 + 30);
+  expect(lastNap()).toBe(16 * 60);
   expect(checkPick({ kind: "nap", minutes: 45 }, AFTERNOON)).toEqual({
     rest: "nap",
     minutes: 20,
@@ -20,12 +30,12 @@ test("what's wrong becomes checked changes: days in the week, real times, short 
   const { checkChanges } = await import("./changes");
   const { weekFrom } = await import("@/modules/arrange/core/plan");
   const now = AFTERNOON; // Friday 3pm
-  const days = weekFrom(now); // Friday, Saturday
+  const days = weekFrom(now); // Friday through next Saturday: days 0–8
   const changes = checkChanges(
     {
       lighter: [
         { day: 0, minutes: 60, deep: false },
-        { day: 5, minutes: 60, deep: false }, // past Saturday
+        { day: 9, minutes: 60, deep: false }, // past next Saturday
       ],
       busy: [
         { day: 1, start: "15:00", end: "21:00", title: "Brother's   wedding" },

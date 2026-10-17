@@ -7,16 +7,12 @@
 // hard rules, events, dismiss with What's wrong, done ticks, removing a
 // school, the pages, and that one student can't see or change another's rows.
 
-import { createClient } from "@supabase/supabase-js";
 import { Temporal } from "temporal-polyfill";
-import type { Database } from "../src/lib/supabase/database.types";
 import { bodyClockOf } from "../src/modules/arrange/core/body-clock";
 import { parseFeed } from "../src/modules/import/core/feed";
 import { mockFeed } from "../src/modules/import/core/mock";
+import { APP, Visitor } from "./visitor";
 
-const APP = "http://localhost:3000";
-const SUPABASE = "http://127.0.0.1:54421";
-const KEY = "sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH";
 const TZ = "America/Los_Angeles";
 // What the extension learns: a late sleeper, about 1:30am to 9:30am.
 const NIGHTS = Array.from({ length: 14 }, (_, i) => ({
@@ -36,74 +32,20 @@ const local = (iso: string) =>
   Temporal.Instant.from(iso).toZonedDateTimeISO(TZ);
 const today = Temporal.Now.plainDateISO(TZ);
 
-class Visitor {
-  private cookies = new Map<string, string>();
-
-  /** A student signs in by typing a fresh email: no code, nothing sent. */
-  static async arrive() {
-    const visitor = new Visitor();
-    check(
-      (await visitor.get("/day")) === 307,
-      "signed out, /day sends you to /login",
-    );
-    const email = `student-${Date.now()}-${Math.round(Math.random() * 1e6)}@example.edu`;
-    const [status] = await visitor.post("/api/login", { email });
-    check(status === 200, `${email} signs in with just the email`);
-    check((await visitor.get("/day")) === 200, "and opens Day");
-    const [again] = await new Visitor().post("/api/login", { email });
-    check(again === 200, "the same email signs in again from another browser");
-    return visitor;
-  }
-
-  private remember(response: Response) {
-    for (const line of response.headers.getSetCookie()) {
-      const [pair] = line.split(";");
-      const at = pair.indexOf("=");
-      this.cookies.set(pair.slice(0, at), pair.slice(at + 1));
-    }
-  }
-
-  private get cookie() {
-    return [...this.cookies].map(([k, v]) => `${k}=${v}`).join("; ");
-  }
-
-  async get(path: string) {
-    const response = await fetch(APP + path, {
-      headers: { cookie: this.cookie },
-      redirect: "manual",
-    });
-    this.remember(response);
-    await response.arrayBuffer();
-    return response.status;
-  }
-
-  async post<T = Record<string, unknown>>(
-    path: string,
-    body: unknown,
-  ): Promise<[number, T]> {
-    const response = await fetch(APP + path, {
-      method: "POST",
-      headers: { cookie: this.cookie, "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    this.remember(response);
-    return [response.status, (await response.json().catch(() => ({}))) as T];
-  }
-
-  /** Supabase as this student, the way the browser writes. */
-  get db() {
-    const raw = [...this.cookies]
-      .filter(([name]) => name.startsWith("sb-planner-auth-token"))
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([, value]) => decodeURIComponent(value))
-      .join("")
-      .replace(/^base64-/, "");
-    const session = JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
-    return createClient<Database>(SUPABASE, KEY, {
-      global: { headers: { Authorization: `Bearer ${session.access_token}` } },
-      auth: { persistSession: false },
-    });
-  }
+/** A student signs in by typing a fresh email: no code, nothing sent. */
+async function arrive() {
+  const visitor = new Visitor();
+  check(
+    (await visitor.get("/day")) === 307,
+    "signed out, /day sends you to /login",
+  );
+  const email = `student-${Date.now()}-${Math.round(Math.random() * 1e6)}@example.edu`;
+  const [status] = await visitor.post("/api/login", { email });
+  check(status === 200, `${email} signs in with just the email`);
+  check((await visitor.get("/day")) === 200, "and opens Day");
+  const [again] = await new Visitor().post("/api/login", { email });
+  check(again === 200, "the same email signs in again from another browser");
+  return visitor;
 }
 
 /** Wait for the background reading: true once `count` tasks are read. */
@@ -116,7 +58,25 @@ async function allRead(v: Visitor, count: number, seconds = 90) {
   return false;
 }
 
-async function sessionsHold(v: Visitor, label: string) {
+/** Every imported school's new work has been planned on its own. */
+async function allPlanned(v: Visitor, seconds = 240) {
+  for (let i = 0; i < seconds; i++) {
+    const { data } = await v.db.from("feeds").select("imported_at, planned_at");
+    if (
+      (data ?? []).every(
+        (f) =>
+          !f.imported_at ||
+          (!!f.planned_at &&
+            Date.parse(f.planned_at) >= Date.parse(f.imported_at)),
+      )
+    )
+      return true;
+    await new Promise((wait) => setTimeout(wait, 1000));
+  }
+  return false;
+}
+
+async function sessionsHold(v: Visitor, label: string, hours = HOURS) {
   const { data: blocks = [] } = await v.db
     .from("blocks")
     .select("*")
@@ -128,7 +88,8 @@ async function sessionsHold(v: Visitor, label: string) {
     start: local(b.start),
     end: local(b.start).add({ minutes: b.minutes }),
   }));
-  const sessions = all.filter(({ b }) => b.kind === "session");
+  // The hard rules hold for planned work; what's done is the week so far.
+  const sessions = all.filter(({ b }) => b.kind === "session" && !b.done);
 
   const overlaps = all.filter(
     (x, i) =>
@@ -140,7 +101,7 @@ async function sessionsHold(v: Visitor, label: string) {
   );
   const asleep = sessions.filter(({ start, end }) => {
     const last = end.subtract({ minutes: 1 }).hour;
-    for (let h = start.hour; h <= last; h++) if (HOURS[h] < 10) return true;
+    for (let h = start.hour; h <= last; h++) if (hours[h] < 10) return true;
     return false;
   });
   const deep = new Map<string, number>();
@@ -191,21 +152,32 @@ async function main() {
   );
 
   console.log("Import");
-  const a = await Visitor.arrive();
+  const a = await arrive();
   const link = (school: string) => ({
     timeZone: TZ,
     source: { kind: "link", url: `${APP}/mock/${school}.ics?tz=${TZ}` },
   });
   // What each mock school holds right now: items timed earlier today are
   // already past, so the counts come from the feed as it parses at this moment.
+  // A mock school also brings this week so far (done), so it saves and reads
+  // everything due since Sunday.
   const upcomingOf = (school: "state" | "college") =>
     parseFeed(mockFeed(school, today, TZ), TZ, new Date());
+  const sunday = today.subtract({ days: today.dayOfWeek % 7 });
+  const weekOf = (school: "state" | "college") =>
+    parseFeed(
+      mockFeed(school, today, TZ),
+      TZ,
+      new Date(sunday.toZonedDateTime({ timeZone: TZ }).epochMilliseconds),
+    ).length;
   const stateUids = upcomingOf("state").map((x) => x.uid);
   const collegeUids = upcomingOf("college").map((x) => x.uid);
   const sharedUid = stateUids.find((u) => collegeUids.includes(u));
   const nState = stateUids.length;
   const nCollege = collegeUids.length;
-  const total = nState + nCollege;
+  const wState = weekOf("state");
+  const wCollege = weekOf("college");
+  const total = wState + wCollege;
   check(
     nState > 0 && nCollege > 0,
     `mock schools hold ${nState} + ${nCollege}`,
@@ -218,19 +190,19 @@ async function main() {
     `state link: ${JSON.stringify(r)}`,
   );
   check(
-    r.reading === nState,
-    `state link answers at once, ${nState} to read (${r.reading})`,
+    r.reading === wState,
+    `state link answers at once, ${wState} to read, this week so far included (${r.reading})`,
   );
   check(
-    await allRead(a, nState),
-    `state link: all ${nState} read by the model in the background`,
+    await allRead(a, wState),
+    `state link: all ${wState} read by the model in the background`,
   );
   [status, r] = await a.post("/api/import", link("college"));
   check(
     status === 200 &&
       r.school === "canvas.mockcollege.edu" &&
       r.upcoming === nCollege &&
-      r.reading === nCollege,
+      r.reading === wCollege,
     `college link: ${JSON.stringify(r)}`,
   );
   const ics = await (await fetch(`${APP}/mock/state.ics?tz=${TZ}`)).text();
@@ -244,7 +216,7 @@ async function main() {
       r.reading === 0,
     `state upload joins the linked school, no new reads: ${JSON.stringify(r)}`,
   );
-  check(await allRead(a, total), `college: all ${nCollege} read too`);
+  check(await allRead(a, total), `college: all ${wCollege} read too`);
   [status] = await a.post("/api/import", {
     timeZone: TZ,
     source: { kind: "file", name: "x.ics", ics: "not a calendar" },
@@ -256,6 +228,15 @@ async function main() {
     feeds?.length === 2,
     `two schools: ${feeds?.map((f) => f.name).join(", ")}`,
   );
+  // Nobody pressed Reschedule: the imported work plans itself.
+  check(await allPlanned(a), "the imported work is planned on its own");
+  const { data: auto = [] } = await a.db
+    .from("blocks")
+    .select("id")
+    .eq("kind", "session");
+  check((auto?.length ?? 0) > 0, `${auto?.length} sessions placed on import`);
+  // Before the extension's nights arrive: the default body clock.
+  await sessionsHold(a, "planned on import", bodyClockOf({}).hours);
   const { data: tasks = [] } = await a.db
     .from("tasks")
     .select("*")
@@ -326,43 +307,48 @@ async function main() {
     `plan the week from 1pm on the learned body clock: ${JSON.stringify({ ...moved, undo: undefined })}`,
   );
   await sessionsHold(a, "week plan");
+  // The plan runs through Saturday of next week.
   const weekEnd = today.add({
-    days: 7 - (Temporal.Now.zonedDateTimeISO(TZ).dayOfWeek % 7),
+    days: 14 - (Temporal.Now.zonedDateTimeISO(TZ).dayOfWeek % 7),
   });
   check(
     (await sessionsNow()).every(
       (b) =>
         Temporal.PlainDate.compare(local(b.start).toPlainDate(), weekEnd) < 0,
     ),
-    "nothing is planned past Saturday",
+    "nothing is planned past next Saturday",
   );
 
-  console.log("Reschedule: push off an hour");
+  console.log("Reschedule: another day");
   let before = await sessionsNow();
-  const first = before.find((b) => local(b.start).toPlainDate().equals(today));
-  if (!first) throw new Error("nothing planned today to push");
-  const pinned = local(first.start);
-  const at = `${String(pinned.hour).padStart(2, "0")}:${String(pinned.minute).padStart(2, "0")}`;
-  const hourEnd = pinned.add({ hours: 1 }).epochMilliseconds;
-  const inHour = before.filter((b) => Date.parse(b.start) < hourEnd);
-  [rs, moved] = await reschedule({ scope: "hour", at });
+  const ahead = before.find(
+    (b) =>
+      Date.parse(b.start) > Date.now() &&
+      !local(b.start).toPlainDate().equals(today),
+  );
+  if (!ahead) throw new Error("nothing planned after today to reschedule");
+  const chosen = local(ahead.start).toPlainDate();
+  const onChosen = before.filter((b) =>
+    local(b.start).toPlainDate().equals(chosen),
+  );
+  [rs, moved] = await reschedule({
+    scope: "day",
+    day: chosen.toString(),
+    at: "13:00",
+  });
   check(
-    rs === 200 && moved.moved === inHour.length,
-    `only the next hour's ${inHour.length} session(s) move (${moved.moved})`,
+    rs === 200 && moved.moved === onChosen.length,
+    `only ${chosen}'s ${onChosen.length} session(s) move (${moved.moved})`,
   );
   let after = await sessionsNow();
   check(
     sameSessions(
-      before.filter((b) => !inHour.includes(b)),
+      before.filter((b) => !onChosen.includes(b)),
       after.filter((b) => before.some((x) => x.id === b.id)),
     ),
     "every other session stays exactly where it was",
   );
-  const pushed = after.filter((b) => !before.some((x) => x.id === b.id));
-  check(
-    pushed.every((b) => Date.parse(b.start) >= hourEnd),
-    "the moved work starts after the hour",
-  );
+  await sessionsHold(a, "another day");
 
   console.log("Reschedule: sick today");
   [rs, moved] = await reschedule({
@@ -458,7 +444,7 @@ async function main() {
   const from = local(target.start).add({ minutes: 5 });
   const fromClock = `${String(from.hour).padStart(2, "0")}:${String(from.minute).padStart(2, "0")}`;
   [rs, moved] = await reschedule({
-    scope: "hour",
+    scope: "day",
     at: fromClock,
     dismiss: target.id,
     answer: "starving, skipped lunch",
@@ -482,7 +468,7 @@ async function main() {
     "the rescheduled task waits at least an hour",
   );
   [rs, moved] = await reschedule({
-    scope: "hour",
+    scope: "day",
     at: fromClock,
     answer: "ugh",
   });
@@ -555,8 +541,8 @@ async function main() {
     .eq("id", college?.id ?? "");
   const { data: left = [] } = await a.db.from("tasks").select("id");
   check(
-    !removeError && left?.length === nState,
-    `removing the college takes its ${nCollege} tasks with it (${left?.length} left)`,
+    !removeError && left?.length === wState,
+    `removing the college takes its ${wCollege} tasks with it (${left?.length} left)`,
   );
   const ids = new Set(left?.map((t) => t.id));
   const { data: sessions = [] } = await a.db
@@ -580,7 +566,7 @@ async function main() {
   }
 
   console.log("Privacy");
-  const b = await Visitor.arrive();
+  const b = await arrive();
   const { data: theirs = [] } = await b.db.from("tasks").select("id");
   check(
     theirs?.length === 0,
@@ -595,7 +581,7 @@ async function main() {
   check(still?.done === true, "and can't change them");
   const theirsBefore = (await a.db.from("blocks").select("id")).data?.length;
   await b.post("/api/reschedule", {
-    scope: "hour",
+    scope: "day",
     dismiss: sessions?.[0]?.id,
     answer: "x",
   });

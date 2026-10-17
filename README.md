@@ -10,7 +10,7 @@ You need [Bun](https://bun.sh), [Supabase CLI](https://supabase.com/docs/guides/
 
 1. Install packages: `bun install`
 2. Start local Supabase (ports API 54421, DB 54422, Studio 54423): `supabase start`. It applies `supabase/migrations/`.
-3. Copy `.env.example` to `.env.development.local` and fill in the four values. The URL, publishable key and secret key come from `supabase status`; the Anthropic key is yours.
+3. Copy `.env.example` to `.env.development.local` and fill in the values. The URL, publishable key and secret key come from `supabase status`; the Anthropic key is yours, and the OpenRouter key (optional) makes Reschedule → Week take seconds.
 4. Run the app: `bun run dev`, then open http://localhost:3000. Sign-in is an email and nothing more: any email gets its own planner. Fine for demos, not for real students.
 
 After a schema change: `supabase db reset` (wipes local data), then `bun run db:types`.
@@ -19,10 +19,10 @@ After a schema change: `supabase db reset` (wipes local data), then `bun run db:
 
 Paste either link into Options, under Canvas:
 
-- http://localhost:3000/mock/state.ics (Mock State University, 17 entries)
-- http://localhost:3000/mock/college.ics (Mock Community College, 4 entries)
+- http://localhost:3000/mock/state.ics (Mock State University, 23 entries)
+- http://localhost:3000/mock/college.ics (Mock Community College, 6 entries)
 
-Dates are relative to today, squeezed into this calendar week. `?at=HH:MM` on any page pins "now". The first Reschedule asks the browser for your location, to find parks for the walks.
+Dates are relative to today, spread over this calendar week and the next (the span a plan covers). `?at=HH:MM` on any page pins "now". The first Reschedule asks the browser for your location, to find parks for the walks.
 
 ## Chrome extension (optional)
 
@@ -41,6 +41,6 @@ With Supabase and the dev server running:
 
 Not set up yet. When it is:
 
-- Set the four environment variables from `.env.example` on the host (Vercel), pointing at a hosted Supabase project with the migrations applied.
+- Set the environment variables from `.env.example` on the host (Vercel), pointing at a hosted Supabase project with the migrations applied.
 - Add the deployed address to the content script `matches` in `extension/manifest.json` (it only lists localhost:3000 and 127.0.0.1:3000), then reload the extension.
 - Sign-in by email alone means anyone can open anyone's planner; put real authentication in before real students use it.

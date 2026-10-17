@@ -124,6 +124,7 @@ await flow("0 login", async () => {
   await page.waitForURL(/\/login\?next=/);
   await snap("login");
   await page.getByLabel("Email").fill(EMAIL);
+  await page.getByLabel("Passphrase").fill(process.env.ACCESS_CODE ?? "");
   await page.getByRole("button", { name: "Continue" }).click();
   await page.waitForURL(/\/day\?at=/, { timeout: 30000 });
 });
@@ -145,7 +146,7 @@ await flow("1 options", async () => {
   notes.push(
     `state result: ${await dlg.getByText(/\d+ upcoming/).innerText()}`,
   );
-  // The model reads in the background: a progress bar and "Reading n of 14".
+  // The model reads in the background: a progress bar and "Reading n of N".
   await dlg.getByRole("progressbar").first().waitFor({ timeout: 10000 });
   notes.push(
     `while reading: ${await dlg
@@ -154,7 +155,7 @@ await flow("1 options", async () => {
       .innerText()}`,
   );
   await snap("options-reading");
-  await dlg.getByText(/14 assignments · link/).waitFor({ timeout: LONG });
+  await dlg.getByText(/\d+ assignments · link/).waitFor({ timeout: LONG });
   await snap("options-state-added");
   await link.fill(COLLEGE);
   await dlg.getByRole("button", { name: "Add", exact: true }).click();
@@ -287,7 +288,7 @@ await flow("3 reschedule the week", async () => {
     .waitFor({ timeout: 5000 })
     .catch(() => notes.push("no spinner seen"));
   await popover()
-    .getByText(/Planned \d+ sessions? this week/)
+    .getByText(/Planned \d+ sessions?\./)
     .waitFor({ timeout: LONG });
   notes.push(`reschedule took ${((Date.now() - t) / 1000).toFixed(0)}s`);
   ok(
@@ -357,8 +358,8 @@ await flow("4b reschedule from a session + nap", async () => {
   await popover().getByRole("button", { name: "Reschedule" }).click();
   await popover().getByText("What's wrong?").waitFor();
   ok(
-    (await popover().locator('[data-state="on"]').innerText()).includes("Hour"),
-    "from a session, Hour is chosen",
+    (await popover().locator('[data-state="on"]').innerText()).includes("Day"),
+    "from a session, Day is chosen",
   );
   const f = await page.evaluate(() => document.activeElement?.id);
   ok(f === "whats-wrong", `text field focused, got ${f}`);
@@ -691,6 +692,7 @@ await flow("14 without the extension", async () => {
   );
   await other.goto(`${BASE}/login`);
   await other.getByLabel("Email").fill(`plain-${Date.now()}@example.edu`);
+  await other.getByLabel("Passphrase").fill(process.env.ACCESS_CODE ?? "");
   await other.getByRole("button", { name: "Continue" }).click();
   await other.waitForURL(/\/day/);
   await other.goto(`${BASE}/options`);
@@ -702,7 +704,7 @@ await flow("14 without the extension", async () => {
   );
   await other.getByLabel("Canvas feed link").fill(STATE);
   await other.getByRole("button", { name: "Add", exact: true }).click();
-  await other.getByText(/14 assignments · link/).waitFor({ timeout: LONG });
+  await other.getByText(/\d+ assignments · link/).waitFor({ timeout: LONG });
   await other.goto(`${BASE}/day?at=${AT}`);
   await other.getByRole("button", { name: "Reschedule", exact: true }).click();
   await other
@@ -710,9 +712,7 @@ await flow("14 without the extension", async () => {
     .last()
     .getByRole("button", { name: "Reschedule" })
     .click();
-  await other
-    .getByText(/Planned \d+ sessions? this week/)
-    .waitFor({ timeout: LONG });
+  await other.getByText(/Planned \d+ sessions?\./).waitFor({ timeout: LONG });
   await other.keyboard.press("Escape");
   const first = other.locator('button[data-kind="session"]').first();
   await first.click();

@@ -1,14 +1,25 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useMutationState,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { atClock, type Zoned, zoned } from "@/lib/time";
 import type { Clock, Night } from "@/modules/arrange/core/body-clock";
 import { km } from "@/modules/suggest/core/walk";
+import { conflictOf, type Placing } from "../core/conflicts";
 import { courseColors } from "../core/courses";
-import { isReading, timeZoneOf } from "../core/items";
+import {
+  isPlanning,
+  isReading,
+  type Replanning,
+  timeZoneOf,
+} from "../core/items";
 import * as q from "../core/queries";
 import { type Planner, placesOf } from "../core/queries";
 
@@ -22,7 +33,10 @@ export function usePlanner(initialData?: Planner) {
     // While the model reads freshly imported assignments, check back each second.
     refetchInterval: (query) => {
       const planner = query.state.data;
-      return planner?.tasks.some((t) => isReading(planner, t)) ? 1000 : false;
+      if (!planner) return false;
+      if (planner.tasks.some((t) => isReading(planner, t))) return 1000;
+      // Then the new work is being planned: check back until it lands.
+      return isPlanning(planner) ? 2000 : false;
     },
   });
 }
@@ -122,6 +136,27 @@ export const useUpdateEvent = () =>
       blocks: p.blocks.map((b) => (b.id === id ? { ...b, ...draft } : b)),
     }),
   );
+
+export const useMoveSession = () =>
+  usePlannerMutation<{ id: string; start: string; minutes: number }>(
+    (db, { id, start, minutes }) => q.moveSession(db, id, { start, minutes }),
+    (p, { id, start, minutes }) => ({
+      ...p,
+      blocks: p.blocks.map((b) => (b.id === id ? { ...b, start, minutes } : b)),
+    }),
+  );
+
+/** What a time set by hand would clash with (see conflicts.ts). */
+export function useConflict() {
+  const { blocks, tasks } = usePlannerData();
+  return (placing: Placing) => conflictOf(placing, blocks, tasks);
+}
+
+/** Only the demo clock (`?at=`) travels between screens; each view keeps its own date. */
+export function useKeep(): string {
+  const at = useSearchParams().get("at");
+  return at ? `?at=${encodeURIComponent(at)}` : "";
+}
 
 export const useDeleteBlock = () =>
   usePlannerMutation<{ id: string }>(
@@ -230,11 +265,12 @@ export const useDeleteFeed = () =>
     },
   );
 
-export type Scope = "hour" | "day" | "week";
+export type Scope = "day" | "week";
 
 export interface Undo {
-  remove: { blocks: string[]; limits: string[] };
+  remove: { blocks: string[]; limits: string[]; dismissals?: string[] };
   restore: {
+    nature?: unknown[];
     sessions: {
       task_id: string;
       start: string;
@@ -250,6 +286,8 @@ export interface Rescheduled {
   placed: number;
   unplaced: number;
   changes: string[];
+  /** Days whose walks were cleared, to plan again once this has answered. */
+  walkDays: string[];
   undo: Undo;
   /** One practical line on what's wrong, when there is one. Not saved. */
   advice?: string;
@@ -262,11 +300,44 @@ export const useReschedule = () =>
     {
       at?: string;
       scope: Scope | { kind: "clash"; start: string; end: string };
+      /** With Day: which day (YYYY-MM-DD), today when missing. */
+      day?: string;
       answer?: string;
       dismiss?: string;
     },
     Rescheduled
   >("/api/reschedule", rescheduleKey);
+
+/**
+ * What's being replanned right now, for the calendar to show it at work: the
+ * Reschedule under way (its scope), or the plan after an import.
+ */
+export function useReplanning(): Replanning | null {
+  const planner = usePlannerData();
+  const pending = useMutationState({
+    filters: { mutationKey: rescheduleKey, status: "pending" },
+    select: (m) =>
+      m.state.variables as
+        | {
+            scope?: Scope | { kind: "clash"; start: string; end: string };
+            day?: string;
+            dismiss?: string;
+          }
+        | undefined,
+  });
+  const running = pending.findLast((v) => v?.scope);
+  if (running?.scope)
+    return running.scope === "day"
+      ? { scope: "day", day: running.day, dismiss: running.dismiss }
+      : typeof running.scope === "string"
+        ? { scope: running.scope, dismiss: running.dismiss }
+        : {
+            scope: "clash",
+            start: running.scope.start,
+            end: running.scope.end,
+          };
+  return isPlanning(planner) ? { scope: "week" } : null;
+}
 
 export const useUndoReschedule = () =>
   useServerCall<Undo, { ok: true }>("/api/reschedule/undo", rescheduleKey);
@@ -278,6 +349,7 @@ export const useUndoReschedule = () =>
 export function useRescheduleAround() {
   const planner = usePlannerData();
   const reschedule = useReschedule();
+  const walks = useWalks();
   const { now, at } = useNow();
   return (draft: q.EventDraft, id?: string) => {
     const start = Date.parse(draft.start);
@@ -294,14 +366,17 @@ export function useRescheduleAround() {
       );
     });
     if (clash) {
-      reschedule.mutate({
-        at,
-        scope: {
-          kind: "clash",
-          start: new Date(start).toISOString(),
-          end: new Date(end).toISOString(),
-        },
-      });
+      reschedule
+        .mutateAsync({
+          at,
+          scope: {
+            kind: "clash",
+            start: new Date(start).toISOString(),
+            end: new Date(end).toISOString(),
+          },
+        })
+        .then((data) => walks(data.walkDays))
+        .catch(() => {});
     }
   };
 }
@@ -315,38 +390,60 @@ export const useDeleteLimit = () =>
 /** How far the student can move before nearby places are found again. */
 const MOVED_KM = 3;
 
+/** Walks being found or planned again: the header shows it ("Finding walks"). */
+export const natureKey = ["nature"];
+
+/** What planning walks changed, for the reschedule's Undo to take back too. */
+export interface WalkUndo {
+  added: string[];
+  removed: unknown[];
+}
+
+/** Plans walks again on these days (every day of the plan when none). */
+export const usePlanWalks = () =>
+  useServerCall<{ dates?: string[]; at?: string }, WalkUndo>(
+    "/api/nature",
+    natureKey,
+  );
+
 /**
- * Nature suggestions need places near the student. Reschedule asks the
- * browser where they are (the browser asks permission the first time) and,
- * when nothing is saved yet or they've moved, finds places in the background;
- * the week's nature suggestions are planned once they're in.
+ * Walks, planned after a reschedule or an import has answered (no plan waits
+ * on them). They need places near the student: the browser is asked where
+ * they are (it asks permission the first time); when nothing is saved yet or
+ * they've moved, places are found again and every day's walks planned around
+ * them, else just the days given. Resolves with what to undo, or null.
  */
-export function useNearbyPlaces(): () => void {
+export function useWalks(): (dates?: string[]) => Promise<WalkUndo | null> {
   const planner = usePlannerData();
   const find = useFindPlaces();
+  const plan = usePlanWalks();
   const { at } = useNow();
-  return () => {
-    if (!("geolocation" in navigator) || find.isPending) return;
-    const saved = placesOf(planner.settings);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const here = {
-          lat: position.coords.latitude,
-          lon: position.coords.longitude,
-        };
-        const from = saved[0]?.from;
-        if (from && km(from, here) < MOVED_KM) return;
-        find.mutate({ ...here, at });
-      },
-      () => {},
-      { maximumAge: 10 * 60_000, timeout: 15_000 },
-    );
-  };
+  return (dates) =>
+    new Promise<{ lat: number; lon: number } | null>((resolve) => {
+      if (!("geolocation" in navigator)) return resolve(null);
+      navigator.geolocation.getCurrentPosition(
+        (position) =>
+          resolve({
+            lat: position.coords.latitude,
+            lon: position.coords.longitude,
+          }),
+        () => resolve(null),
+        { maximumAge: 10 * 60_000, timeout: 15_000 },
+      );
+    })
+      .then((here) => {
+        const from = placesOf(planner.settings)[0]?.from;
+        if (here && !find.isPending && (!from || km(from, here) >= MOVED_KM))
+          return find.mutateAsync({ ...here, at });
+        return plan.mutateAsync({ dates, at });
+      })
+      .catch(() => null);
 }
 
 export const useFindPlaces = () =>
-  useServerCall<{ lat: number; lon: number; at?: string }, unknown>(
+  useServerCall<{ lat: number; lon: number; at?: string }, WalkUndo>(
     "/api/places",
+    natureKey,
   );
 
 /**

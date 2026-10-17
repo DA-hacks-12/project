@@ -22,12 +22,22 @@ const RADIUS_M = 5000;
 const KEEP = 12;
 const OTHER_KINDS = 4; // of the 12, room kept for the nearest non-parks
 const ROUTES_AT_ONCE = 4; // FOSSGIS is a shared, free server: a few at a time
-// The main public server, then two mirrors; all are sometimes busy.
+// The public servers, all asked at once: the first good answer wins. Each is
+// often busy (the main one took 24 to 42 seconds when tried, a mirror 7 to
+// 16, others answered with errors), so waiting on one at a time was slow.
 const OVERPASS = [
   "https://overpass-api.de/api/interpreter",
   "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
 ];
+// What OpenStreetMap had near a spot (about a kilometre square), kept for a
+// day, so another search from the same area skips the slow part.
+const NEARBY_MS = 24 * 60 * 60_000;
+type Nearby = Map<string, { at: number; elements: Element[] }>;
+const shared = globalThis as { placesNearby?: Nearby };
+if (!shared.placesNearby) shared.placesNearby = new Map();
+const nearby: Nearby = shared.placesNearby;
 
 /** Named parks, reserves, gardens and hiking routes; not sports grounds (a ball park is tagged a park). */
 export function query(lat: number, lon: number): string {
@@ -97,30 +107,50 @@ function kindOf(tags: Record<string, string>): Place["kind"] {
 }
 
 export async function findPlaces(lat: number, lon: number): Promise<Place[]> {
-  let last = "";
-  for (const server of OVERPASS) {
-    try {
-      const response = await fetch(server, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "User-Agent": "study-planner-demo",
-        },
-        body: `data=${encodeURIComponent(query(lat, lon))}`,
-        cache: "no-store",
-        signal: AbortSignal.timeout(50_000),
-      });
-      if (!response.ok) {
-        last = `answered ${response.status}`;
-        continue;
-      }
-      const { elements } = (await response.json()) as { elements: Element[] };
-      return withWalks(placesFrom(elements, lat, lon), { lat, lon });
-    } catch (error) {
-      last = error instanceof Error ? error.message : String(error);
-    }
+  const area = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+  const known = nearby.get(area);
+  const fresh = known && Date.now() - known.at < NEARBY_MS ? known : null;
+  const elements = fresh?.elements ?? (await fromOverpass(lat, lon));
+  if (!fresh) nearby.set(area, { at: Date.now(), elements });
+  return withWalks(placesFrom(elements, lat, lon), { lat, lon });
+}
+
+/** Every server at once; the first that answers in full wins, the rest are stopped. */
+async function fromOverpass(lat: number, lon: number): Promise<Element[]> {
+  const stop = new AbortController();
+  try {
+    return await Promise.any(
+      OVERPASS.map(async (server) => {
+        const response = await fetch(server, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "study-planner-demo",
+          },
+          body: `data=${encodeURIComponent(query(lat, lon))}`,
+          cache: "no-store",
+          signal: AbortSignal.any([stop.signal, AbortSignal.timeout(50_000)]),
+        });
+        if (!response.ok) throw new Error(`answered ${response.status}`);
+        const body = (await response.json()) as {
+          elements?: Element[];
+          remark?: string;
+        };
+        // A busy server can answer 200 with a timeout in `remark` and no places.
+        if (!body.elements || /error|timed out/i.test(body.remark ?? ""))
+          throw new Error(body.remark ?? "no elements");
+        return body.elements;
+      }),
+    );
+  } catch (error) {
+    const why =
+      error instanceof AggregateError
+        ? error.errors.map((e) => (e instanceof Error ? e.message : e))
+        : [error];
+    throw new Error(`OpenStreetMap: ${why.join("; ")}`);
+  } finally {
+    stop.abort();
   }
-  throw new Error(`OpenStreetMap ${last}`);
 }
 
 /** Each place with the walk there from `from`, nearest on foot first. */

@@ -23,6 +23,30 @@
   border-left: 1px solid var(--gray-a3);
 }
 
+/* The student's sharpest hours (their body clock): a faint field behind the
+   blocks, so deep work visibly sits in it. */
+.sharp {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.sharp span {
+  position: absolute;
+  top: 10px;
+  left: 8px;
+  color: var(--gray-10);
+  font-size: var(--font-size-1);
+}
+
+/* One hour of the wave over what's being replanned (motion in globals.css). */
+.cell {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
 .now {
   position: absolute;
   top: 0;

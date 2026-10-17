@@ -3,27 +3,32 @@
 import { Flex, Text } from "@radix-ui/themes";
 import styles from "./feeds.module.css";
 
-/** "Reading 9 of 15" with a bar that grows as the model's readings land. */
+/**
+ * "Reading 9 of 15" with a bar that grows as the model's readings land; or
+ * just "Planning" (the new work being placed) or "Finding walks" with the sweep.
+ */
 export function Reading({
   done,
   total,
   label = true,
+  verb = "Reading",
 }: {
   done: number;
   total: number;
   label?: boolean;
+  verb?: "Reading" | "Planning" | "Finding walks";
 }) {
   return (
     <Flex direction="column" gap="1">
       {label && (
         <Text size="1" color="gray">
-          Reading {done} of {total}
+          {total ? `${verb} ${done} of ${total}` : verb}
         </Text>
       )}
       <div
         className={styles.track}
         role="progressbar"
-        aria-label="Reading assignments"
+        aria-label={verb === "Reading" ? "Reading assignments" : verb}
         aria-valuemin={0}
         aria-valuemax={total}
         aria-valuenow={done}

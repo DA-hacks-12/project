@@ -6,13 +6,21 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Temporal } from "temporal-polyfill";
 import { clock } from "@/lib/time";
 import { bodyClockOf } from "@/modules/arrange/core/body-clock";
+import { weekFrom } from "@/modules/arrange/core/plan";
 import {
   current,
   dayView,
+  mayMove,
+  replanSpan,
+  sharpRuns,
   timeZoneOf,
   titleOf,
 } from "@/modules/planner/core/items";
-import { useNow, usePlannerData } from "@/modules/planner/ui/planner";
+import {
+  useNow,
+  usePlannerData,
+  useReplanning,
+} from "@/modules/planner/ui/planner";
 import { Due } from "./Block";
 import styles from "./day.module.css";
 import { Feeds } from "./Feeds";
@@ -42,6 +50,20 @@ export function DayView() {
     (i) => i.kind === "session" && i.block.done,
   ).length;
   const happening = today ? current(items, now) : undefined;
+  const body = bodyClockOf(planner.settings ?? {});
+  // A plan being made shows on the day it touches.
+  const replanning = useReplanning();
+  const plan = weekFrom(now);
+  const replan = replanning
+    ? replanSpan(replanning, date, now, plan[plan.length - 1].end)
+    : null;
+  // Day reschedules the day on screen, when it's one the plan covers.
+  const ahead = plan.some((w) => w.start.toPlainDate().equals(date));
+  const moving = new Set(
+    replanning
+      ? items.filter((i) => mayMove(i, replanning, now)).map((i) => i.key)
+      : [],
+  );
 
   if (planner.tasks.length === 0) {
     return (
@@ -65,7 +87,7 @@ export function DayView() {
             {done}/{sessions.length} done
           </Text>
           <ReadingAll />
-          <Reschedule />
+          <Reschedule days={ahead ? [date] : []} />
         </Flex>
         <Text size="3" color="gray">
           {today
@@ -95,7 +117,10 @@ export function DayView() {
 
       <Timeline
         items={items}
-        hours={bodyClockOf(planner.settings ?? {}).hours}
+        hours={body.hours}
+        sharp={sharpRuns(body)}
+        replan={replan}
+        moving={moving}
         now={today ? now : null}
       />
     </div>

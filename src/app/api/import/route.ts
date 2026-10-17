@@ -1,11 +1,15 @@
 import { after } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { reschedule } from "@/modules/arrange/core/arrange";
+import { oneAtATime } from "@/modules/arrange/core/lock";
+import { fillWeekSoFar } from "@/modules/arrange/core/week-so-far";
 import { importFeed, readAssignments } from "@/modules/import/core/run";
 
 // The tasks are saved and the answer goes back at once; the model reads the
-// new ones afterwards, and the page shows them filling in.
-export const maxDuration = 120;
+// new ones afterwards, and the page shows them filling in. Then the work not
+// planned yet gets placed (Reschedule's "fill").
+export const maxDuration = 300;
 
 const Body = z.object({
   timeZone: z.string().min(1).max(64),
@@ -44,6 +48,24 @@ export async function POST(request: Request) {
       if (read < imported.reading.length) {
         console.error(`import: ${imported.reading.length - read} left unread`);
       }
+      // New or changed work plans itself: only what isn't planned yet is
+      // placed, and every session already planned stays. A mock school's
+      // week so far is laid in first. Then the page, which checks back while
+      // this runs, can stop.
+      try {
+        await oneAtATime(reader, async () => {
+          await fillWeekSoFar(reader, new Date()).catch((error) =>
+            console.error("import: week so far", error),
+          );
+          return reschedule(reader, new Date(), { scope: { kind: "fill" } });
+        });
+      } catch (error) {
+        console.error("import: planning", error);
+      }
+      await reader
+        .from("feeds")
+        .update({ planned_at: new Date().toISOString() })
+        .eq("id", imported.feedId);
     });
     return Response.json({
       school: imported.school,

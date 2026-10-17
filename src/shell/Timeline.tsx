@@ -20,10 +20,19 @@ export function Timeline({
   items,
   hours,
   now,
+  sharp = [],
+  replan = null,
+  moving,
 }: {
   items: Item[];
   hours: number[] | null;
   now: Zoned | null;
+  /** The student's sharpest hours, as runs within the day ([[14, 20]]). */
+  sharp?: [number, number][];
+  /** The part of the day being replanned right now: a wave crosses it. */
+  replan?: { from: Zoned; to: Zoned } | null;
+  /** The blocks that may move in it (their keys): they breathe. */
+  moving?: Set<string>;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const firstAwake = hours
@@ -82,6 +91,34 @@ export function Timeline({
             />
           );
         })}
+        {sharp.map(([first, end]) => {
+          const from = Math.max(first, startHour);
+          if (end <= from) return null;
+          return (
+            <div
+              key={first}
+              className={styles.sharp}
+              style={{
+                left: (from - startHour) * PX_PER_HOUR,
+                width: (end - from) * PX_PER_HOUR,
+              }}
+            >
+              <span>Sharpest</span>
+            </div>
+          );
+        })}
+        {replan &&
+          waveCells(replan, startHour).map((cell, i) => (
+            <div
+              key={cell.left}
+              className={`${styles.cell} replan-cell`}
+              style={{
+                left: cell.left,
+                width: cell.width,
+                animationDelay: `calc(var(--replan-step) * ${i})`,
+              }}
+            />
+          ))}
         {nowX !== null && nowX >= 0 && (
           <div className={styles.now} style={{ left: nowX }} />
         )}
@@ -107,11 +144,38 @@ export function Timeline({
                 { left: x(item.start), width, "--lane": lane } as CSSProperties
               }
             >
-              <Block item={item} narrow={width < NARROW} />
+              <Block
+                item={item}
+                narrow={width < NARROW}
+                moving={moving?.has(item.key)}
+              />
             </div>
           ))}
         </div>
       </div>
     </div>
   );
+}
+
+/** The replanned stretch cut into hour columns, in pixels along the track. */
+function waveCells(
+  replan: { from: Zoned; to: Zoned },
+  startHour: number,
+): { left: number; width: number }[] {
+  const minute = (at: Zoned, sameDay: boolean) =>
+    sameDay ? at.hour * 60 + at.minute : 24 * 60;
+  const from = Math.max(minute(replan.from, true), startHour * 60);
+  const to = minute(
+    replan.to,
+    replan.to.toPlainDate().equals(replan.from.toPlainDate()),
+  );
+  const cells: { left: number; width: number }[] = [];
+  for (let at = from; at < to; at = (Math.floor(at / 60) + 1) * 60) {
+    const end = Math.min(to, (Math.floor(at / 60) + 1) * 60);
+    cells.push({
+      left: ((at - startHour * 60) / 60) * PX_PER_HOUR,
+      width: ((end - at) / 60) * PX_PER_HOUR,
+    });
+  }
+  return cells;
 }

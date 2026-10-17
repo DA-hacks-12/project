@@ -1,10 +1,11 @@
 import "server-only";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { claude, MODEL } from "@/lib/claude";
+import { claude, SONNET, tally } from "@/lib/claude";
 import { hhmm, shortDate, type Zoned } from "@/lib/time";
 import type { Window } from "@/modules/arrange/core/plan";
 import { type Changes, checkChanges } from "./changes";
+import { lastNap } from "./rest";
 
 // Reschedule asks "What's wrong?" first. Claude turns the answer into a few
 // fixed kinds of change (a lighter day, busy time, a break now); code checks
@@ -18,7 +19,7 @@ lighter: days that should carry less work. "I feel sick today" → today, at mos
 busy: times they can't work. "My brother's wedding from 3 to 9 on Saturday" → that day, 15:00 to 21:00, title "Brother's wedding". Start and end as HH:MM, 24-hour. The title uses their own words, at most 5 words. Their workload stays; it just moves around the busy time.
 
 rest: one break to take right now, only if their words call for it.
-- nap, 10 to 20 minutes: sleepy or drained, especially in the early-afternoon dip. Short naps refresh without grogginess. Never in the evening.
+- nap, 10 to 20 minutes: sleepy or drained, especially in the early-afternoon dip. Short naps refresh without grogginess. Not after the nap cutoff given: a nap close to bedtime pushes sleep later.
 - walk, 10 to 30 minutes: can't focus, restless, stressed or mentally worn out. Time outside, ideally near trees or water, restores attention.
 - eat, 15 to 40 minutes: hungry, shaky, or hasn't eaten in a while.
 - move, 5 to 15 minutes: stiff, bored, or has been sitting too long.
@@ -55,6 +56,8 @@ export interface Understand {
   days: Window[];
   restStart: Zoned;
   activeShare: number;
+  asleep: number; // when they usually fall asleep, minutes from midnight
+  day?: number; // the day being rescheduled, when it isn't today
   workedToday: number;
   lastBreakEnd: Zoned | null;
   session: { title: string; work: string } | null;
@@ -68,28 +71,32 @@ export async function understand(input: Understand): Promise<Changes | null> {
       `${d} · ${shortDate(day.end.subtract({ days: 1 }))}${d === 0 ? " (today)" : ""}`,
   );
   const text = [
-    `It's ${hhmm(input.now)}. Alertness this hour: ${input.activeShare} (0 asleep, 100 sharpest).`,
+    `It's ${hhmm(input.now)}. Alertness this hour: ${input.activeShare} (0 asleep, 100 sharpest). No naps after ${clockOf(lastNap(input.asleep))}: they usually fall asleep around ${clockOf(input.asleep)}.`,
     `Worked today: ${input.workedToday} min. Last break: ${input.lastBreakEnd ? `ended ${hhmm(input.lastBreakEnd)}` : "none yet"}.`,
     input.session
       ? `Rescheduling from a session: ${input.session.title} (${input.session.work} work).`
       : "",
     "",
-    "Days this week:",
+    "Days (this week and next):",
     ...days,
+    input.day
+      ? `Rescheduling day ${input.day}: unless they name another day, what they describe is on that day.`
+      : "",
     "",
     `What's wrong, in their words:\n<answer>\n${answer}\n</answer>`,
   ]
     .filter((line) => line !== "")
     .join("\n");
   const response = await claude().messages.parse({
-    model: MODEL,
+    model: SONNET,
     max_tokens: 16000,
-    output_config: { effort: "low", format: zodOutputFormat(Raw) },
+    output_config: { effort: "medium", format: zodOutputFormat(Raw) },
     system: [
       { type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } },
     ],
     messages: [{ role: "user", content: text }],
   });
+  tally("whats-wrong", SONNET, response.usage);
   if (response.stop_reason !== "end_turn" || !response.parsed_output)
     return null;
   return checkChanges(
@@ -97,5 +104,12 @@ export async function understand(input: Understand): Promise<Changes | null> {
     input.days,
     input.now,
     input.restStart,
+    input.asleep,
   );
+}
+
+/** "18:30" from minutes after midnight. */
+function clockOf(minutes: number): string {
+  const m = ((minutes % 1440) + 1440) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }

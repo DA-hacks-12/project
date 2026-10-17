@@ -1,0 +1,11 @@
+# Only the app goes to Vercel: no keys, no test output, no Python reference.
+# Folders are anchored to the root (a bare `supabase/` would also drop src/lib/supabase).
+.env*
+!.env.example
+/workflow/
+/.e2e-ui/
+/scripts/
+/supabase/
+/MapTest.html
+/MapTest.js
+*.tsbuildinfo

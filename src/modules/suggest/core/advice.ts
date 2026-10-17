@@ -15,6 +15,9 @@ Think about who they are, what's left of their day and the hour. A good line nam
 
 Rules:
 - One sentence of at most 18 words, plain words, no emoji.
+- Their words about how they feel come first. The alertness figure is only an estimate from their usual sleep: use it as background, never quote it or argue with what they say.
+- No nap after the nap cutoff given: it pushes their night's sleep later. Past it, suggest something else (a short walk outside, bright light, an earlier bedtime).
+- The context is for you: don't mention the cutoff, the alertness figure or any clock time from it.
 - Don't diagnose, don't cheer them on, and don't say their plan moved.
 - If it could be an emergency (chest pain, trouble breathing, a serious injury, thoughts of hurting themselves), point to emergency help: their local emergency number, or 988 in the US for a crisis.
 - If their words are vague, or there's nothing useful to add, return an empty string.`;
@@ -23,6 +26,7 @@ export interface AdviceContext {
   answer: string;
   now: Zoned;
   alertness: number; // this hour, from the body clock: 0 asleep, 100 sharpest
+  lastNap: string; // "18:30": no naps from then until they sleep
   clock: string; // the body clock in words: "Up around 9:45am, asleep around 1:45am · Late type · …"
   workedToday: number; // minutes
   /** What's still ahead today: sessions, events and breaks. */
@@ -36,7 +40,7 @@ export function adviceMessage(context: AdviceContext): string {
   const { now } = context;
   const weekday = now.toLocaleString("en-US", { weekday: "long" });
   const lines = [
-    `It's ${weekday}, ${hhmm(now)}. Alertness this hour: ${context.alertness} (0 asleep, 100 sharpest).`,
+    `It's ${weekday}, ${hhmm(now)}. Estimated alertness this hour: ${context.alertness} (0 asleep, 100 sharpest). Nap cutoff: ${context.lastNap}.`,
     `Body clock: ${context.clock}.`,
     `Worked today: ${context.workedToday} min.`,
   ];

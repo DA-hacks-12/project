@@ -55,6 +55,8 @@ body {
   --reading-pulse: 1.6s;
   --reading-sweep: 1.4s;
   --progress-move: 400ms;
+  --replan-wave: 1.6s; /* one pass of light over what's being replanned */
+  --replan-step: 90ms; /* between one column lighting and the next */
 
   --hairline: var(--gray-a4);
   --quiet: var(--gray-11);
@@ -62,6 +64,7 @@ body {
 }
 
 .rt-PopoverContent,
+.rt-HoverCardContent,
 .rt-DialogContent {
   box-shadow: none;
   border: 1px solid var(--edge);
@@ -78,4 +81,47 @@ body {
 
 :where(button) {
   font: inherit;
+}
+
+/* While a plan is being made, the calendar shows it at work: a wave of light
+   crosses what's being replanned column by column, and the sessions that may
+   move breathe. Flat: an ink tint, opacity only. */
+.replan-cell {
+  background: var(--ink);
+  opacity: 0;
+  pointer-events: none;
+  animation: replan-wave var(--replan-wave) var(--ease-calm) infinite;
+}
+
+@keyframes replan-wave {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.08;
+  }
+}
+
+/* (Two classes, to win over a block's own `all: unset`.) */
+.radix-themes .replan-moving {
+  animation: replan-breathe var(--reading-pulse) var(--ease-calm) infinite;
+}
+
+@keyframes replan-breathe {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .replan-cell {
+    animation: none;
+    opacity: 0.05;
+  }
+
+  .radix-themes .replan-moving {
+    animation: none;
+    opacity: 0.7;
+  }
 }

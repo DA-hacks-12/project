@@ -13,3 +13,4 @@ node_modules/
 # Browser test output, and the one-time session handoff
 .e2e-ui/
 HANDOFF.md
+.vercel

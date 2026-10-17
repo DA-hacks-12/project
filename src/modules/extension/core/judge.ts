@@ -1,6 +1,6 @@
 import "server-only";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { claude, MODEL } from "@/lib/claude";
+import { claude, MODEL, tally } from "@/lib/claude";
 import { Answer, check, message, SYSTEM, type Verdict } from "./site";
 
 /** Haiku, no thinking: one word for one site. Null when the call fails, so nothing is kept. */
@@ -16,6 +16,7 @@ export async function judgeSite(host: string): Promise<Verdict | null> {
       ],
       messages: [{ role: "user", content: message(host) }],
     });
+    tally("site", MODEL, response.usage);
     if (response.stop_reason !== "end_turn") return null;
     return check(response.parsed_output);
   } catch (error) {

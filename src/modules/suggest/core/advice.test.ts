@@ -26,6 +26,7 @@ test("the model sees the hour and what's left of the day, then the student's wor
     answer: " head hurts ",
     now,
     alertness: 0,
+    lastNap: "16:00",
     clock:
       "Up around 8am, asleep around 11pm · Middle type · Sharpest 11am–3pm",
     workedToday: 0,
@@ -39,7 +40,7 @@ test("the model sees the hour and what's left of the day, then the student's wor
     session: null,
   });
   expect(text).toMatch(
-    /^It's Friday, 01:00\. Alertness this hour: 0 \(0 asleep, 100 sharpest\)\./,
+    /^It's Friday, 01:00\. Estimated alertness this hour: 0 \(0 asleep, 100 sharpest\)\. Nap cutoff: 16:00\./,
   );
   expect(text).toContain("Body clock: Up around 8am, asleep around 11pm");
   expect(text).toContain("Still today: 09:00–10:00 Lab Report 2.");

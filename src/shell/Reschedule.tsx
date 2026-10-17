@@ -10,8 +10,13 @@ import {
 } from "@radix-ui/themes";
 import { useIsMutating } from "@tanstack/react-query";
 import { useState } from "react";
+import type { Temporal } from "temporal-polyfill";
 import { clock, shortDate, zoned } from "@/lib/time";
-import { biggestPriority, timeZoneOf } from "@/modules/planner/core/items";
+import {
+  biggestPriority,
+  isPlanning,
+  timeZoneOf,
+} from "@/modules/planner/core/items";
 import {
   rescheduleKey,
   useNow,
@@ -22,22 +27,25 @@ import { RescheduleResult, useLastReschedule } from "./RescheduleResult";
 
 /**
  * The header's Reschedule: asks what's wrong and how much may move, then shows
- * what changed and the biggest priority. Before anything is planned this week
- * it offers the whole week; after that, today.
+ * what changed and the biggest priority. Before anything is planned it offers
+ * the whole plan; after that, a day: one of `days`, the days on screen.
  */
-export function Reschedule() {
+export function Reschedule({ days }: { days?: Temporal.PlainDate[] }) {
   const planner = usePlannerData();
   const { now } = useNow();
   const [open, setOpen] = useState(false);
-  const { last, clear } = useLastReschedule();
+  const { last, failed, clear } = useLastReschedule();
   const [seen, setSeen] = useState<number | null>(null);
-  // A new answer, wherever it came from, opens here.
-  if (last && last.id !== seen) {
-    setSeen(last.id);
+  // A new answer (or a failure), wherever it came from, opens here.
+  const latest = last?.id ?? failed?.id ?? null;
+  if (latest !== null && latest !== seen) {
+    setSeen(latest);
     setOpen(true);
   }
-  // Any reschedule in flight: this button's, a session card's, or one after a new block.
-  const busy = useIsMutating({ mutationKey: rescheduleKey }) > 0;
+  // Any reschedule in flight (this button's, a session card's, one after a new
+  // block), or new work from an import being planned on its own.
+  const busy =
+    useIsMutating({ mutationKey: rescheduleKey }) > 0 || isPlanning(planner);
   const planned = planner.blocks.some(
     (b) =>
       b.kind === "session" &&
@@ -62,8 +70,16 @@ export function Reschedule() {
             <RescheduleResult last={last} />
             <BiggestPriority />
           </>
+        ) : failed ? (
+          <Text size="2" color="red" role="alert">
+            {failed.message}
+          </Text>
         ) : (
-          <RescheduleForm defaultScope={planned ? "day" : "week"} />
+          <RescheduleForm
+            defaultScope={planned ? "day" : "week"}
+            days={days}
+            onStart={() => setOpen(false)}
+          />
         )}
       </Popover.Content>
     </Popover.Root>

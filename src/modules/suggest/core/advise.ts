@@ -1,7 +1,7 @@
 import "server-only";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { claude, SONNET } from "@/lib/claude";
+import { claude, SONNET, tally } from "@/lib/claude";
 import type { createClient } from "@/lib/supabase/server";
 import { addMinutes, minutesBetween, zoned } from "@/lib/time";
 import { bodyClockOf, describe } from "@/modules/arrange/core/body-clock";
@@ -11,6 +11,7 @@ import {
   adviceMessage,
   checkAdvice,
 } from "./advice";
+import { lastNap } from "./rest";
 
 // The one-line advice on What's wrong: read the day, ask Sonnet 5.5 (medium
 // effort), keep the line only if it holds. Runs beside the reschedule.
@@ -57,6 +58,7 @@ export async function advise(
     answer,
     now,
     alertness: bodyClock.hours[now.hour],
+    lastNap: clockOf(lastNap(bodyClock.asleep)),
     clock: describe(bodyClock),
     workedToday: today
       .filter((b) => b.kind === "session" && b !== from)
@@ -91,7 +93,14 @@ export async function advise(
     ],
     messages: [{ role: "user", content: adviceMessage(context) }],
   });
+  tally("advice", SONNET, response.usage);
   if (response.stop_reason !== "end_turn" || !response.parsed_output)
     return null;
   return checkAdvice(response.parsed_output.advice);
+}
+
+/** "18:30" from minutes after midnight. */
+function clockOf(minutes: number): string {
+  const m = ((minutes % 1440) + 1440) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }

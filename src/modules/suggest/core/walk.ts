@@ -23,7 +23,7 @@ export interface Route extends Walk {
 const FOSSGIS = "https://routing.openstreetmap.de/routed-foot/route/v1/driving";
 const DETOUR = 1.3;
 const KMH = 5;
-const TIMEOUT_MS = 8000;
+const TIMEOUT_MS = 4000; // past this, the estimate: a walk is never worth the wait
 
 export function routeUrl(from: Point, to: Point, line: boolean): string {
   const where = `${from.lon},${from.lat};${to.lon},${to.lat}`;

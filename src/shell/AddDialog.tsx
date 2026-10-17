@@ -5,6 +5,7 @@ import { useState } from "react";
 import { iso } from "@/lib/time";
 import {
   useAddEvent,
+  useConflict,
   useNow,
   useRescheduleAround,
 } from "@/modules/planner/ui/planner";
@@ -16,6 +17,7 @@ export function AddDialog({ children }: { children: React.ReactNode }) {
   const guard = useDraftGuard();
   const add = useAddEvent();
   const around = useRescheduleAround();
+  const conflict = useConflict();
   const { now } = useNow();
   const next = now.round({ smallestUnit: "hour", roundingMode: "ceil" });
   const { setDirty, setAsking } = guard;
@@ -46,6 +48,9 @@ export function AddDialog({ children }: { children: React.ReactNode }) {
               start: iso(next),
               minutes: 60,
             }}
+            conflict={(start, minutes) =>
+              conflict({ kind: "event", start, minutes })
+            }
             onSave={(draft) => {
               const id = crypto.randomUUID();
               add.mutate({ id, draft }, { onSuccess: () => around(draft, id) });

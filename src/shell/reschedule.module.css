@@ -1,0 +1,4 @@
+/* A week of days fits the card: each day as wide as the rest, no side padding. */
+.days :global(.rt-SegmentedControlItemLabel) {
+  padding-inline: 0;
+}

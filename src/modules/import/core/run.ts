@@ -1,9 +1,10 @@
 import "server-only";
-import { createHash } from "node:crypto";
 import pLimit from "p-limit";
 import type { createClient } from "@/lib/supabase/server";
-import { type Assignment, parseFeed, schoolOf } from "./feed";
+import { zoned } from "@/lib/time";
+import { type Assignment, fingerprint, parseFeed, schoolOf } from "./feed";
 import { interpret } from "./interpret";
+import { isMockSchool } from "./mock";
 
 // Import: a Canvas feed link or an uploaded .ics → read → saved at once as
 // tasks under their school → new or changed ones go to Claude in the background. A due-date
@@ -19,18 +20,13 @@ export type Source =
 // up the rest.
 const CONCURRENCY = 32;
 
-export function fingerprint(
-  a: Pick<Assignment, "course" | "title" | "text">,
-): string {
-  return createHash("sha256")
-    .update(`${a.course}\n${a.title}\n${a.text}`)
-    .digest("hex")
-    .slice(0, 16);
-}
-
-async function calendarText(source: Source): Promise<string> {
+async function calendarText(source: Source, tz: string): Promise<string> {
   if (source.kind === "file") return source.ics;
-  const url = source.url.replace(/^webcal:\/\//, "https://");
+  const url = new URL(source.url.replace(/^webcal:\/\//, "https://"));
+  // A mock school's dates count from today in the student's zone; online the
+  // server runs on UTC, which is already tomorrow on a US evening.
+  if (/^\/mock\/\w+\.ics$/.test(url.pathname) && !url.searchParams.has("tz"))
+    url.searchParams.set("tz", tz);
   const response = await fetch(url, { cache: "no-store" });
   if (!response.ok) throw new Error(`The feed answered ${response.status}`);
   return response.text();
@@ -42,10 +38,21 @@ export async function importFeed(
   tz: string,
   now: Date,
 ) {
-  const assignments = parseFeed(await calendarText(source), tz, now);
+  const text = await calendarText(source, tz);
+  const assignments = parseFeed(text, tz, now);
   const school =
     schoolOf(assignments) ??
     (source.kind === "link" ? new URL(source.url).host : source.name);
+  // A mock school is demo data: what was due earlier this week comes in too,
+  // done, and its work is laid into the days before (`fillWeekSoFar`), so the
+  // week on screen is full from Sunday. A real school brings only what's ahead.
+  const today = zoned(now, tz).startOfDay();
+  const sunday = today.subtract({ days: today.dayOfWeek % 7 });
+  const earlier = isMockSchool(school)
+    ? parseFeed(text, tz, new Date(sunday.epochMilliseconds)).filter(
+        (a) => Date.parse(a.due) < now.getTime(),
+      )
+    : [];
 
   const { error: settingsError } = await supabase
     .from("settings")
@@ -98,12 +105,63 @@ export async function importFeed(
     { onConflict: "owner_id,feed_id,uid" },
   );
   if (upsertError) throw upsertError;
+  const past = earlier.filter((a) => !known.has(a.uid));
+  if (past.length) {
+    const { error: pastError } = await supabase.from("tasks").upsert(
+      past.map((a) => ({
+        feed_id: feed.id,
+        uid: a.uid,
+        title: a.title,
+        course: a.course,
+        due: a.due,
+        url: a.url,
+        fingerprint: fingerprint(a),
+        read: false,
+        done: true,
+      })),
+      { onConflict: "owner_id,feed_id,uid" },
+    );
+    if (pastError) throw pastError;
+  }
+
+  // A due date that moved earlier can leave sessions after it. They go, and
+  // the next Reschedule places that work again.
+  const { data: tasks, error: tasksError } = await supabase
+    .from("tasks")
+    .select("id, due")
+    .eq("feed_id", feed.id);
+  if (tasksError) throw tasksError;
+  const dueOf = new Map(tasks.map((t) => [t.id, Date.parse(t.due)]));
+  if (dueOf.size) {
+    const { data: sessions, error: sessionsError } = await supabase
+      .from("blocks")
+      .select("id, task_id, start, minutes")
+      .eq("kind", "session")
+      .in("task_id", [...dueOf.keys()])
+      .gte("start", now.toISOString());
+    if (sessionsError) throw sessionsError;
+    const late = sessions.filter(
+      (b) =>
+        Date.parse(b.start) + b.minutes * 60_000 >
+        (dueOf.get(b.task_id ?? "") ?? Number.POSITIVE_INFINITY),
+    );
+    if (late.length) {
+      const { error: lateError } = await supabase
+        .from("blocks")
+        .delete()
+        .in(
+          "id",
+          late.map((b) => b.id),
+        );
+      if (lateError) throw lateError;
+    }
+  }
 
   return {
     school,
     feedId: feed.id,
     upcoming: assignments.length,
-    reading: fresh.map(({ a }) => a),
+    reading: [...fresh.map(({ a }) => a), ...past],
   };
 }
 

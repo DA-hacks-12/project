@@ -2,10 +2,13 @@
 
 import { Button, Flex, Text } from "@radix-ui/themes";
 import { createContext, useContext, useState } from "react";
+import { bodyClockOf, inShort } from "@/modules/arrange/core/body-clock";
 import {
   type Rescheduled,
   type Scope,
+  usePlannerData,
   useUndoReschedule,
+  type WalkUndo,
 } from "@/modules/planner/ui/planner";
 
 // The last reschedule's answer: a line of advice on what's wrong (when there
@@ -21,7 +24,13 @@ export interface Last {
 
 const LastContext = createContext<{
   last: Last | null;
-  show: (data: Rescheduled, scope: Scope, fromSession: boolean) => void;
+  /** A reschedule that failed, said on the same button. */
+  failed: { id: number; message: string } | null;
+  /** Shows a result; returns its id. */
+  show: (data: Rescheduled, scope: Scope, fromSession: boolean) => number;
+  /** The walks planned after result `id`: its Undo takes them back too. */
+  addWalks: (id: number, walks: WalkUndo) => void;
+  fail: (message: string) => void;
   clear: () => void;
 } | null>(null);
 
@@ -31,13 +40,53 @@ export function LastRescheduleProvider({
   children: React.ReactNode;
 }) {
   const [last, setLast] = useState<Last | null>(null);
+  const [failed, setFailed] = useState<{
+    id: number;
+    message: string;
+  } | null>(null);
   return (
     <LastContext.Provider
       value={{
         last,
-        show: (data, scope, fromSession) =>
-          setLast({ id: Date.now(), data, scope, fromSession }),
-        clear: () => setLast(null),
+        failed,
+        show: (data, scope, fromSession) => {
+          const id = Date.now();
+          setFailed(null);
+          setLast({ id, data, scope, fromSession });
+          return id;
+        },
+        addWalks: (id, walks) =>
+          setLast((l) =>
+            l?.id === id
+              ? {
+                  ...l,
+                  data: {
+                    ...l.data,
+                    undo: {
+                      remove: {
+                        ...l.data.undo.remove,
+                        blocks: [...l.data.undo.remove.blocks, ...walks.added],
+                      },
+                      restore: {
+                        ...l.data.undo.restore,
+                        nature: [
+                          ...(l.data.undo.restore.nature ?? []),
+                          ...walks.removed,
+                        ],
+                      },
+                    },
+                  },
+                }
+              : l,
+          ),
+        fail: (message) => {
+          setLast(null);
+          setFailed({ id: Date.now(), message });
+        },
+        clear: () => {
+          setLast(null);
+          setFailed(null);
+        },
       }}
     >
       {children}
@@ -53,10 +102,11 @@ export function useLastReschedule() {
 
 export function RescheduleResult({ last }: { last: Last }) {
   const undo = useUndoReschedule();
+  const clock = bodyClockOf(usePlannerData().settings ?? {});
   const { moved, placed, unplaced, changes, advice } = last.data;
   const summary =
     last.scope === "week" && !last.fromSession
-      ? `Planned ${placed} ${placed === 1 ? "session" : "sessions"} this week.`
+      ? `Planned ${placed} ${placed === 1 ? "session" : "sessions"}.`
       : moved
         ? `Moved ${moved} ${moved === 1 ? "session" : "sessions"}.`
         : "Nothing to move.";
@@ -66,6 +116,11 @@ export function RescheduleResult({ last }: { last: Last }) {
       <Text size="2" weight="medium">
         {summary}
       </Text>
+      {last.scope === "week" && placed > 0 && (
+        <Text size="2" color="gray">
+          Around your body clock: {inShort(clock)}.
+        </Text>
+      )}
       {changes.map((change) => (
         <Text key={change} size="2">
           {change}
@@ -73,7 +128,7 @@ export function RescheduleResult({ last }: { last: Last }) {
       ))}
       {unplaced > 0 && (
         <Text size="2" color="gray">
-          {unplaced} min didn't fit this week.
+          {unplaced} min didn't fit.
         </Text>
       )}
       <Flex mt="1">

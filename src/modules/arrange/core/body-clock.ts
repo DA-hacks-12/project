@@ -176,6 +176,22 @@ const TYPE_WORD: Record<Chronotype, string> = {
   late: "Late type",
 };
 
+/** "2pm–8pm": the sharpest stretch. */
+export function sharpestText(clock: BodyClock): string {
+  return `${hourText(clock.sharpest[0])}–${hourText(clock.sharpest[1])}`;
+}
+
+/** Whether hour `h` falls in the sharpest stretch (which may wrap past midnight). */
+export function isSharp(clock: BodyClock, h: number): boolean {
+  const [first, end] = clock.sharpest;
+  return first < end ? h >= first && h < end : h >= first || h < end;
+}
+
+/** "Late type, sharpest 2pm–8pm". */
+export function inShort(clock: BodyClock): string {
+  return `${TYPE_WORD[clock.type]}, sharpest ${sharpestText(clock)}`;
+}
+
 /** "Up around 9:30am, asleep around 1:30am · Late type · Sharpest 11am–2pm". */
 export function describe(clock: BodyClock): string {
   return [

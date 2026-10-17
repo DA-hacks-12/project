@@ -1,6 +1,6 @@
 import "server-only";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { claude, SONNET } from "@/lib/claude";
+import { claude, SONNET, tally } from "@/lib/claude";
 import {
   checkNature,
   freeGaps,
@@ -35,6 +35,7 @@ export async function pickNature(input: NatureInput): Promise<Outing[]> {
       ],
       messages: [{ role: "user", content: natureMessage(asked) }],
     });
+    tally("nature", SONNET, response.usage);
     if (response.stop_reason !== "end_turn" || !response.parsed_output)
       return [];
     return checkNature(response.parsed_output.suggestions, asked);

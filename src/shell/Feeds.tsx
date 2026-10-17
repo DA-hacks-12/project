@@ -24,6 +24,7 @@ export function Feeds() {
   const file = useRef<HTMLInputElement>(null);
   const running = importFeed.isPending ? importFeed.variables.source : null;
 
+  // The walks follow once the import's plan is made (see App).
   const run = (source: ImportSource) =>
     importFeed.mutate({
       source,

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Planner",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "icons": {
     "16": "icons/16.png",
     "32": "icons/32.png",
@@ -19,7 +19,11 @@
   "background": { "service_worker": "background.js", "type": "module" },
   "content_scripts": [
     {
-      "matches": ["http://localhost:3000/*", "http://127.0.0.1:3000/*"],
+      "matches": [
+        "https://planner-eta-brown-56.vercel.app/*",
+        "http://localhost:3000/*",
+        "http://127.0.0.1:3000/*"
+      ],
       "js": ["content.js"]
     }
   ],

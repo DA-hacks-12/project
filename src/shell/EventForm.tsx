@@ -3,7 +3,7 @@
 import { Button, Flex, Text, TextArea, TextField } from "@radix-ui/themes";
 import { type ReactElement, useState } from "react";
 import { Temporal } from "temporal-polyfill";
-import { hhmm, iso, zoned } from "@/lib/time";
+import { hhmm, iso, type Zoned, zoned } from "@/lib/time";
 import { timeZoneOf } from "@/modules/planner/core/items";
 import type { EventDraft } from "@/modules/planner/core/queries";
 import { usePlannerData } from "@/modules/planner/ui/planner";
@@ -33,17 +33,25 @@ interface Initial {
   minutes: number;
 }
 
-/** The student's own block: a class, work, anything with a time. */
+/**
+ * The student's own block (a class, work, anything with a time), or, with
+ * `timeOnly`, just when a session happens. `conflict` says what a time would
+ * clash with; while it does, Save waits.
+ */
 export function EventForm({
   guard,
   initial,
   onSave,
   close,
+  timeOnly,
+  conflict,
 }: {
   guard: ReturnType<typeof useDraftGuard>;
   initial: Initial;
   onSave: (draft: EventDraft) => void;
   close?: ReactElement;
+  timeOnly?: boolean;
+  conflict?: (start: Zoned, minutes: number) => string | null;
 }) {
   const tz = timeZoneOf(usePlannerData());
   const start = zoned(initial.start, tz);
@@ -53,7 +61,10 @@ export function EventForm({
   const [to, setTo] = useState(hhmm(start.add({ minutes: initial.minutes })));
   const [details, setDetails] = useState(initial.details ?? "");
 
-  const draft = toDraft(tz, title, date, from, to, details);
+  const timed = toDraft(tz, timeOnly ? "-" : title, date, from, to, details);
+  const problem =
+    timed && conflict ? conflict(zoned(timed.start, tz), timed.minutes) : null;
+  const draft = timed && !problem ? timed : null;
   const change =
     <T,>(set: (value: T) => void) =>
     (value: T) => {
@@ -91,29 +102,31 @@ export function EventForm({
       }}
     >
       <Flex direction="column" gap="3">
-        <Text as="label" htmlFor="event-title">
+        {!timeOnly && (
+          <Text as="label" htmlFor="event-title">
+            <Text size="2" weight="medium" as="div">
+              Title
+            </Text>
+            <TextField.Root
+              id="event-title"
+              value={title}
+              maxLength={120}
+              onChange={(e) => change(setTitle)(e.target.value)}
+            />
+          </Text>
+        )}
+        <Text as="label" htmlFor="event-date">
           <Text size="2" weight="medium" as="div">
-            Title
+            Date
           </Text>
           <TextField.Root
-            id="event-title"
-            value={title}
-            maxLength={120}
-            onChange={(e) => change(setTitle)(e.target.value)}
+            id="event-date"
+            type="date"
+            value={date}
+            onChange={(e) => change(setDate)(e.target.value)}
           />
         </Text>
         <Flex gap="2">
-          <Text as="label" htmlFor="event-date" style={{ flex: 2 }}>
-            <Text size="2" weight="medium" as="div">
-              Date
-            </Text>
-            <TextField.Root
-              id="event-date"
-              type="date"
-              value={date}
-              onChange={(e) => change(setDate)(e.target.value)}
-            />
-          </Text>
           <Text as="label" htmlFor="event-start" style={{ flex: 1 }}>
             <Text size="2" weight="medium" as="div">
               Start
@@ -137,17 +150,24 @@ export function EventForm({
             />
           </Text>
         </Flex>
-        <Text as="label" htmlFor="event-details">
-          <Text size="2" weight="medium" as="div">
-            Details
+        {problem && (
+          <Text size="2" color="red" role="alert">
+            {problem}
           </Text>
-          <TextArea
-            id="event-details"
-            value={details}
-            maxLength={2000}
-            onChange={(e) => change(setDetails)(e.target.value)}
-          />
-        </Text>
+        )}
+        {!timeOnly && (
+          <Text as="label" htmlFor="event-details">
+            <Text size="2" weight="medium" as="div">
+              Details
+            </Text>
+            <TextArea
+              id="event-details"
+              value={details}
+              maxLength={2000}
+              onChange={(e) => change(setDetails)(e.target.value)}
+            />
+          </Text>
+        )}
         <Flex>
           <Button type="submit" disabled={!draft}>
             Save

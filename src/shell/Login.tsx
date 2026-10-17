@@ -6,7 +6,8 @@ import { useState } from "react";
 import styles from "./login.module.css";
 
 // An email identifies the student: new or returning, they type it and they're
-// in. No code, no password (the owner's call for the demo).
+// in. No password (the owner's call for the demo); online, the hackathon's
+// passphrase keeps everyone else out (checked by the server).
 
 /** Only paths inside this app; anything else lands on Day. */
 export function safeNext(next: string | null): string {
@@ -23,16 +24,17 @@ export function Login() {
   const router = useRouter();
   const next = safeNext(useSearchParams().get("next"));
   const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const signIn = async (address: string) => {
+  const signIn = async (address: string, passphrase: string) => {
     setPending(true);
     setError(null);
     const response = await fetch("/api/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: address }),
+      body: JSON.stringify({ email: address, code: passphrase }),
     }).catch(() => null);
     if (!response?.ok) {
       const result = await response?.json().catch(() => null);
@@ -50,7 +52,7 @@ export function Login() {
         onSubmit={(event) => {
           event.preventDefault();
           const address = email.trim();
-          if (address) void signIn(address);
+          if (address) void signIn(address, code);
         }}
       >
         <Flex direction="column" gap="5">
@@ -71,7 +73,18 @@ export function Login() {
               value={email}
               onChange={(event) => setEmail(event.target.value)}
             />
-            <Flex>
+            <Text as="label" htmlFor="code" size="2" weight="medium" mt="2">
+              Passphrase
+            </Text>
+            <TextField.Root
+              id="code"
+              size="3"
+              type="password"
+              autoComplete="off"
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+            />
+            <Flex mt="2">
               <Button
                 type="submit"
                 size="3"

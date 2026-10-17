@@ -1,13 +1,15 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { activityFromExtension } from "@/modules/extension/ui/bridge";
+import { isPlanning } from "@/modules/planner/core/items";
 import type { Planner } from "@/modules/planner/core/queries";
 import {
   usePlanner,
   usePlannerData,
   useSaveActivity,
+  useWalks,
 } from "@/modules/planner/ui/planner";
 import { DayView } from "./DayView";
 import { Focus } from "./Focus";
@@ -36,6 +38,7 @@ export function App({
       <LastRescheduleProvider>
         <Loaded initial={initial}>
           <ActiveHoursSync />
+          <WalksAfterPlanning />
           {view === "focus" && focus ? (
             <Focus id={focus} />
           ) : (
@@ -64,6 +67,21 @@ function Loaded({
 }) {
   const { data } = usePlanner(initial);
   return data ? children : null;
+}
+
+/**
+ * When an import's plan is done, its walks are planned. Watched on whatever
+ * page is open, so a reload while it plans still gets them.
+ */
+function WalksAfterPlanning() {
+  const planning = isPlanning(usePlannerData());
+  const walks = useWalks();
+  const was = useRef(planning);
+  useEffect(() => {
+    if (was.current && !planning) void walks();
+    was.current = planning;
+  }, [planning, walks]);
+  return null;
 }
 
 /** When the extension is installed, the app takes what it learned on load. */

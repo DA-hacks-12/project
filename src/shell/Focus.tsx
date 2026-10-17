@@ -2,11 +2,12 @@
 
 import { SpeakerLoudIcon, SpeakerOffIcon } from "@radix-ui/react-icons";
 import { Button, Flex, Heading, IconButton, Text } from "@radix-ui/themes";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { askExtension } from "@/modules/extension/ui/bridge";
 import {
   useCourseColor,
+  useKeep,
   usePlannerData,
   useSetBlockDone,
 } from "@/modules/planner/ui/planner";
@@ -45,8 +46,7 @@ export function pomodoros(total: number, on: number, off: number): Segment[] {
 export function Focus({ id }: { id: string }) {
   const planner = usePlannerData();
   const router = useRouter();
-  const params = useSearchParams();
-  const keep = params.toString() ? `?${params.toString()}` : "";
+  const keep = useKeep();
   const setDone = useSetBlockDone();
   const courseColor = useCourseColor();
   const block = planner.blocks.find((b) => b.id === id);

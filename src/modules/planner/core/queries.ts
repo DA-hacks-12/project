@@ -87,6 +87,15 @@ export async function updateEvent(db: Db, id: string, draft: EventDraft) {
   check((await db.from("blocks").update(draft).eq("id", id)).error);
 }
 
+/** A session moved by hand: a new start and length. */
+export async function moveSession(
+  db: Db,
+  id: string,
+  time: { start: string; minutes: number },
+) {
+  check((await db.from("blocks").update(time).eq("id", id)).error);
+}
+
 export async function deleteBlock(db: Db, id: string) {
   check((await db.from("blocks").delete().eq("id", id)).error);
 }

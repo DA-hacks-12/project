@@ -29,6 +29,7 @@ export function checkChanges(
   days: Window[],
   now: Zoned,
   restStart: Zoned,
+  asleep?: number, // when they usually fall asleep, minutes from midnight
 ): Changes {
   const lighter = new Map<
     number,
@@ -62,6 +63,7 @@ export function checkChanges(
   const rest = checkPick(
     raw.rest ? { kind: raw.rest.kind, minutes: raw.rest.minutes } : null,
     restStart,
+    asleep,
   );
   return { lighter: [...lighter.values()], busy, rest };
 }

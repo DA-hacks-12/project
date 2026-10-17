@@ -12,15 +12,27 @@ import {
 } from "@radix-ui/themes";
 import dynamic from "next/dynamic";
 import NextLink from "next/link";
-import { useSearchParams } from "next/navigation";
 import { type CSSProperties, useState } from "react";
-import { clock, clockRange, shortDate, zoned } from "@/lib/time";
-import { type Item, isReading, titleOf } from "@/modules/planner/core/items";
+import { Temporal } from "temporal-polyfill";
+import { clock, clockRange, duration, shortDate, zoned } from "@/lib/time";
+import { bodyClockOf } from "@/modules/arrange/core/body-clock";
+import {
+  type Item,
+  isReading,
+  timeZoneOf,
+  titleOf,
+  whyHere,
+} from "@/modules/planner/core/items";
 import type { TaskRow } from "@/modules/planner/core/queries";
 import {
+  useConflict,
   useCourseColor,
   useDeleteBlock,
+  useKeep,
+  useMoveSession,
+  useNow,
   usePlannerData,
+  usePlanWalks,
   useRescheduleAround,
   useSetBlockDone,
   useSetTaskDone,
@@ -57,12 +69,15 @@ export function Block({
   item,
   compact,
   narrow,
+  moving,
 }: {
   item: Item;
   /** In the week grid: one line of title, then the time. */
   compact?: boolean;
   /** Too slim for a time range: just when it starts. */
   narrow?: boolean;
+  /** It may move in the replan under way: it breathes. */
+  moving?: boolean;
 }) {
   const guard = useDraftGuard();
   const courseColor = useCourseColor();
@@ -81,6 +96,7 @@ export function Block({
     compact && styles.compact,
     compact && minutes <= 40 && styles.line,
     narrow && styles.narrow,
+    moving && "replan-moving",
   ].filter(Boolean);
   const [open, setOpen] = useState(false);
   const button = (
@@ -116,7 +132,7 @@ export function Block({
         collisionPadding={12}
         onEscapeKeyDown={guard.onEscapeKeyDown}
       >
-        <BlockCard item={item} guard={guard} />
+        <BlockCard item={item} guard={guard} close={() => setOpen(false)} />
       </Popover.Content>
     </Popover.Root>
   );
@@ -125,13 +141,15 @@ export function Block({
 function BlockCard({
   item,
   guard,
+  close,
 }: {
   item: Item;
   guard: ReturnType<typeof useDraftGuard>;
+  close: () => void;
 }) {
   switch (item.kind) {
     case "session":
-      return <SessionCard item={item} />;
+      return <SessionCard item={item} guard={guard} close={close} />;
     case "event":
       return <EventCard item={item} guard={guard} />;
     case "break":
@@ -176,17 +194,94 @@ function TaskDetails({ task }: { task: TaskRow }) {
   );
 }
 
-function SessionCard({ item }: { item: Extract<Item, { kind: "session" }> }) {
+function SessionCard({
+  item,
+  guard,
+  close,
+}: {
+  item: Extract<Item, { kind: "session" }>;
+  guard: ReturnType<typeof useDraftGuard>;
+  close: () => void;
+}) {
   const [rescheduling, setRescheduling] = useState(false);
+  const [editing, setEditing] = useState(false);
   const setDone = useSetBlockDone();
-  const params = useSearchParams();
-  const keep = params.toString() ? `?${params.toString()}` : "";
+  const move = useMoveSession();
+  const conflict = useConflict();
+  const planWalks = usePlanWalks();
+  const planner = usePlannerData();
+  const { now, at } = useNow();
+  const keep = useKeep();
   const task = item.task;
+  // Why it sits here, where that's true (plain code over the plan).
+  const reasons = whyHere(item, planner, bodyClockOf(planner.settings ?? {}));
 
   // Rescheduling from a session: that session moves (and its task waits an
-  // hour), plus whatever the scope opens up.
-  if (rescheduling)
-    return <RescheduleForm dismiss={item.block.id} defaultScope="hour" />;
+  // hour), plus whatever the scope opens up. Day means the session's day.
+  if (rescheduling) {
+    const day = item.start.toPlainDate();
+    return (
+      <RescheduleForm
+        dismiss={item.block.id}
+        defaultScope="day"
+        days={
+          Temporal.PlainDate.compare(day, now.toPlainDate()) > 0 ? [day] : []
+        }
+        onStart={close}
+      />
+    );
+  }
+
+  // Moving it by hand: a time that clashes can't be saved. A nature
+  // suggestion it now covers is planned again for that day.
+  if (editing)
+    return (
+      <EventForm
+        guard={guard}
+        timeOnly
+        initial={item.block}
+        conflict={(start, minutes) =>
+          conflict({
+            kind: "session",
+            start,
+            minutes,
+            id: item.block.id,
+            taskId: item.block.task_id,
+          })
+        }
+        onSave={({ start, minutes }) => {
+          const tz = timeZoneOf(planner);
+          const from = Date.parse(start);
+          const to = from + minutes * 60_000;
+          const covers = planner.blocks.some(
+            (b) =>
+              b.kind === "nature" &&
+              Date.parse(b.start) < to &&
+              Date.parse(b.start) + b.minutes * 60_000 > from,
+          );
+          move.mutate(
+            { id: item.block.id, start, minutes },
+            {
+              onSuccess: () => {
+                if (covers)
+                  planWalks.mutate({
+                    dates: [zoned(start, tz).toPlainDate().toString()],
+                    at,
+                  });
+              },
+            },
+          );
+          setEditing(false);
+        }}
+        close={
+          <Popover.Close>
+            <Button variant="soft" color="gray">
+              Don't save
+            </Button>
+          </Popover.Close>
+        }
+      />
+    );
 
   return (
     <Flex direction="column" gap="2">
@@ -195,6 +290,11 @@ function SessionCard({ item }: { item: Extract<Item, { kind: "session" }> }) {
       </Text>
       <Heading size="3">{task?.title ?? "Session"}</Heading>
       <When item={item} extra={task?.work ?? undefined} />
+      {reasons.length > 0 && (
+        <Text as="p" size="2" color="gray">
+          {reasons.join(". ")}.
+        </Text>
+      )}
       {task && <TaskDetails task={task} />}
       <Flex gap="2" mt="2">
         <Button asChild>
@@ -207,6 +307,9 @@ function SessionCard({ item }: { item: Extract<Item, { kind: "session" }> }) {
           }
         >
           {item.block.done ? "Undo" : "Done"}
+        </Button>
+        <Button variant="soft" color="gray" onClick={() => setEditing(true)}>
+          Edit
         </Button>
         <Button
           variant="soft"
@@ -229,6 +332,7 @@ function EventCard({
 }) {
   const [editing, setEditing] = useState(false);
   const update = useUpdateEvent();
+  const conflict = useConflict();
   const around = useRescheduleAround();
   const remove = useDeleteBlock();
   if (editing) {
@@ -236,6 +340,9 @@ function EventCard({
       <EventForm
         guard={guard}
         initial={item.block}
+        conflict={(start, minutes) =>
+          conflict({ kind: "event", start, minutes, id: item.block.id })
+        }
         onSave={(draft) => {
           update.mutate(
             { id: item.block.id, draft },
@@ -317,16 +424,28 @@ function MapPreview({
     <HoverCard.Root open={hover && !hidden} onOpenChange={setHover}>
       <HoverCard.Trigger>{children}</HoverCard.Trigger>
       <HoverCard.Content
-        width="360px"
+        width="320px"
         size="1"
         className={styles.preview}
         side="top"
         align="start"
+        sideOffset={6}
       >
         <NatureMap from={place.from} place={place} tall />
-        <Text as="p" size="2" weight="medium" className={styles.previewLabel}>
-          {place.name}
-        </Text>
+        <Flex
+          justify="between"
+          align="baseline"
+          gap="3"
+          className={styles.previewLabel}
+        >
+          <Text size="2" weight="medium" className={styles.previewName}>
+            {place.name}
+          </Text>
+          <Text size="1" color="gray" wrap="nowrap">
+            {place.walk?.estimate ? "About " : ""}
+            {walkMinutes(place)} min walk
+          </Text>
+        </Flex>
       </HoverCard.Content>
     </HoverCard.Root>
   );
@@ -370,15 +489,18 @@ function NatureCard({ item }: { item: Extract<Item, { kind: "nature" }> }) {
   );
 }
 
-/** An assignment on the day it's due. */
+/** An assignment on the day it's due; or, with `left`, work not planned yet. */
 export function Due({
   task,
   tz,
   fill,
+  left,
 }: {
   task: TaskRow;
   tz: string;
   fill?: boolean;
+  /** Minutes of its work not placed in the plan yet. */
+  left?: number;
 }) {
   const setDone = useSetTaskDone();
   const planner = usePlannerData();
@@ -391,9 +513,12 @@ export function Due({
           type="button"
           className={`${styles.due} ${fill ? styles.fill : ""} ${task.done ? styles.done : ""} ${isReading(planner, task) ? styles.reading : ""}`}
           style={{ "--fill": courseColor(task.course) } as CSSProperties}
-          data-kind="due"
+          data-kind={left === undefined ? "due" : "unplanned"}
         >
-          <span className={styles.chip}>{task.title}</span>
+          <span className={styles.chip}>
+            {task.title}
+            {left === undefined ? "" : ` · ${duration(left)} left`}
+          </span>
         </button>
       </Popover.Trigger>
       <Popover.Content width="340px" align="start" collisionPadding={12}>

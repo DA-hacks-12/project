@@ -1,7 +1,8 @@
 import "server-only";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { claude, MODEL } from "@/lib/claude";
+import { claude, SONNET, tally } from "@/lib/claude";
+import { fastAnswer } from "@/lib/openrouter";
 import type { createClient } from "@/lib/supabase/server";
 import {
   addMinutes,
@@ -15,21 +16,21 @@ import {
 import type { Work } from "@/modules/import/core/reading";
 import type { Changes } from "@/modules/suggest/core/changes";
 import {
+  clearNature,
   type NatureRestore,
-  refreshNature,
 } from "@/modules/suggest/core/nature-run";
 import { restWords } from "@/modules/suggest/core/rest";
 import { understand } from "@/modules/suggest/core/understand";
 import { bodyClockOf, describe } from "./body-clock";
 import {
-  check,
-  HORIZON_DAYS,
+  checkAndFill,
   type Limit,
   message,
   NOT_NOW,
   type OpenTask,
   type Placed,
   type Plan,
+  SESSION,
   type Span,
   weekFrom,
 } from "./plan";
@@ -37,29 +38,32 @@ import { preferenceRules, preferencesOf } from "./preferences";
 
 // Reschedule: "What's wrong?" → Claude turns the answer into changes (a
 // lighter day, busy time, a break now) → code checks and saves them → the
-// scope decides which sessions may move (the next hour, today, the week, or
-// just those under a new busy time) → Claude proposes where they go → `check`
+// scope decides which sessions may move (a day, the week, or just those
+// under a new busy time) → Claude proposes where they go → `check`
 // drops what breaks a hard rule → saved, with exactly what Undo needs.
 // Sessions outside the scope, breaks and the student's events never move.
 
 type Client = Awaited<ReturnType<typeof createClient>>;
 
 export type Scope =
-  | { kind: "hour" }
-  | { kind: "day" }
+  // Today's remaining work, or another day of the plan's (YYYY-MM-DD).
+  | { kind: "day"; date?: string }
   | { kind: "week" }
-  | { kind: "clash"; start: string; end: string };
+  | { kind: "clash"; start: string; end: string }
+  // After an import: place only the work not planned yet; nothing moves.
+  | { kind: "fill" };
 
-const SYSTEM = `You place a college student's coursework into work sessions within this school week (through Saturday).
+const SYSTEM = `You place a college student's coursework into work sessions within this school week and the next (through Saturday of next week).
 
 You get each day's open time and busy times, any lighter days, the student's body clock (when they sleep, their chronotype, and their alertness hour by hour), their tasks with due time, minutes to place, a one-line description and whether the work is deep or light, and what is moving.
 
 Arrange it the way research on time and attention says:
 - Deadlines first. Work due within a day or two gets its time first and ends before it's due.
 - Match work to the body clock. Alertness builds after waking, peaks, and falls toward sleep (the synchrony effect: people do hard thinking best at their own peak). Put deep work in the most alert hours and light work in lower ones. Never use an hour marked 0: the student is asleep.
-- Spread long work out. Spaced sessions beat one long push: a task with more than 90 minutes left is split across several days before it's due.
-- One course at a time. Switching subjects costs focus, so put sessions of the same course next to each other and change course only after a break.
+- Spread long work out. A task with more than 90 minutes left gets sessions on several days before it's due: material studied across days sticks better than the same hours in one push (the spacing effect), and coming back to an essay or a problem set after a night's sleep helps.
+- Vary the work. Focus wears down over hours on one task, and mixing subjects between sessions helps learning (interleaving). After a session, the next one is usually a different task, ideally another course; never more than two sessions in a row on the same task.
 - Breaks. Sessions run 25 to 90 minutes, with at least 10 minutes between them.
+- Pace the day. Attention wears down with time on task, and a real break restores it: after 90 minutes of work in a row (sessions less than 30 minutes apart count as one stretch), leave at least 30 minutes free before the next session.
 - Leave room. People underestimate how long work takes, so keep at least a third of each day's open time free, and no more than 4 hours of deep work in a day.
 - Busy times (classes, work, breaks, sessions that stay) are fixed: never put a session over one.
 - A lighter day keeps within its minutes, and gets no deep work unless it says so.
@@ -67,15 +71,17 @@ Arrange it the way research on time and attention says:
 
 The student may also give preferences (how big the chunks are, what each day starts with, breaks, how many courses a day, how early to finish, weekends). Follow them over the research guidelines above, but never break a deadline, a busy time, a lighter day, the 4-hour deep cap or the free third.
 
-Return sessions with the task id, the day number, a start time as HH:MM (24-hour) and minutes.`;
+Return the sessions as s, each with t (the task number), d (the day number), at (the start, HH:MM, 24-hour) and m (minutes).`;
 
-const Arrangement = z.object({
-  sessions: z.array(
-    z.object({
-      task: z.string(),
-      day: z.number().int(),
-      start: z.string(),
-      minutes: z.number().int(),
+// Short keys and numbers, not names: every token here is one the model has
+// to write. t = task number, d = day number, at = start (HH:MM), m = minutes.
+const Arrangement = z.strictObject({
+  s: z.array(
+    z.strictObject({
+      t: z.number().int(),
+      d: z.number().int(),
+      at: z.string(),
+      m: z.number().int(),
     }),
   ),
 });
@@ -98,8 +104,10 @@ export interface Undo {
 export interface Rescheduled {
   moved: number; // sessions that were allowed to move
   placed: number; // sessions placed
-  unplaced: number; // minutes that didn't fit this week
+  unplaced: number; // minutes that didn't fit
   changes: string[]; // what the answer changed, in plain words written by code
+  /** Days whose walks were cleared, for the page to plan again (YYYY-MM-DD). */
+  walkDays: string[];
   undo: Undo;
 }
 
@@ -144,6 +152,14 @@ async function rescheduleInto(
   const now = zoned(nowDate, tz);
   const days = weekFrom(now);
   const dateOf = (d: number) => days[d].end.subtract({ days: 1 }).toPlainDate();
+  const scope = options.scope;
+  // The day a Day reschedule works on: today unless it names another of the plan's days.
+  const chosen = Math.max(
+    0,
+    scope.kind === "day" && scope.date
+      ? days.findIndex((_, d) => dateOf(d).toString() === scope.date)
+      : 0,
+  );
 
   const [tasksResult, blocksResult, limitsResult, dismissalsResult] =
     await Promise.all([
@@ -203,6 +219,8 @@ async function rescheduleInto(
     days,
     restStart,
     activeShare: hours[now.hour],
+    asleep: bodyClock.asleep,
+    day: chosen,
     workedToday: today
       .filter((b) => b.kind === "session" && b !== from)
       .reduce(
@@ -311,7 +329,6 @@ async function rescheduleInto(
 
   // 2. The scope decides which sessions may move.
   const weekEnd = days[days.length - 1].end;
-  const endOfToday = days[0].end;
   const inWindow = (
     b: { at: Zoned; minutes: number },
     start: Zoned,
@@ -319,7 +336,6 @@ async function rescheduleInto(
   ) =>
     b.at.epochMilliseconds < end.epochMilliseconds &&
     ends(b).epochMilliseconds > start.epochMilliseconds;
-  const scope = options.scope;
   const clash =
     scope.kind === "clash"
       ? { start: zoned(scope.start, tz), end: zoned(scope.end, tz) }
@@ -329,14 +345,17 @@ async function rescheduleInto(
     if (b === from) return true;
     const future = b.at.epochMilliseconds >= now.epochMilliseconds;
     switch (scope.kind) {
-      case "hour":
-        return inWindow(b, now, addMinutes(now, 60));
       case "day":
-        return inWindow(b, now, endOfToday);
+        // Today from now (with a session under way), or all of another day.
+        return inWindow(b, chosen ? days[chosen].start : now, days[chosen].end);
       case "week":
-        return future && b.at.epochMilliseconds < weekEnd.epochMilliseconds;
+        // Every future session, even past the plan's last day (left from an
+        // older plan), so nothing stale stays behind.
+        return future;
       case "clash":
         return future && !!clash && inWindow(b, clash.start, clash.end);
+      case "fill":
+        return false;
       default:
         return false;
     }
@@ -363,15 +382,32 @@ async function rescheduleInto(
     (b) => b.kind === "session" && !movableIds.has(b.id),
   );
 
-  const horizon = now.add({ days: HORIZON_DAYS }).epochMilliseconds;
+  // Only work due by the plan's last Saturday: next week's work comes in when
+  // its week does.
+  const horizon = weekEnd.epochMilliseconds;
+  // Fill: each task may place what its sessions don't cover yet.
+  const owed = new Map<string, number>();
+  if (scope.kind === "fill")
+    for (const t of taskRows) {
+      if (!t.read || t.done || !t.work || !t.minutes) continue;
+      const due = Date.parse(t.due);
+      if (due <= now.epochMilliseconds || due > horizon) continue;
+      const planned = kept
+        .filter((b) => b.task_id === t.id)
+        .reduce((sum, b) => sum + b.minutes, 0);
+      if (t.minutes - planned >= SESSION.min)
+        owed.set(t.id, t.minutes - planned);
+    }
   const allowance =
     scope.kind === "week"
       ? null
-      : movable.reduce((map, b) => {
-          if (b.task_id)
-            map.set(b.task_id, (map.get(b.task_id) ?? 0) + b.minutes);
-          return map;
-        }, new Map<string, number>());
+      : scope.kind === "fill"
+        ? owed
+        : movable.reduce((map, b) => {
+            if (b.task_id)
+              map.set(b.task_id, (map.get(b.task_id) ?? 0) + b.minutes);
+            return map;
+          }, new Map<string, number>());
   const open: OpenTask[] = taskRows
     .filter(
       (t) => t.read && !t.done && t.work && (!allowance || allowance.has(t.id)),
@@ -405,6 +441,7 @@ async function rescheduleInto(
       start: b.at,
       end: ends(b),
       label: `session on ${titles.get(b.task_id ?? "") ?? "a task"}`,
+      session: true,
     })),
   ];
   const done = new Map<string, number>();
@@ -437,9 +474,6 @@ async function rescheduleInto(
   ]) {
     wait(d.task_id, addMinutes(zoned(d.at, tz), NOT_NOW));
   }
-  if (scope.kind === "hour")
-    for (const b of movable)
-      if (b.task_id) wait(b.task_id, addMinutes(now, 60));
 
   const movingList = movable
     .filter((b) => b.task_id)
@@ -448,10 +482,12 @@ async function rescheduleInto(
         `${titles.get(b.task_id ?? "")} (${b.minutes} min, was ${shortDate(b.at)} ${clock(b.at)})`,
     );
   const instruction = {
-    hour: `Push off the next hour: only these sessions move, to after ${clock(addMinutes(now, 60))}, preferably later today and in the same order; nothing else changes. Moving: ${movingList.join("; ") || "nothing"}.`,
-    day: `Reschedule today: only today's remaining sessions move, later today if the day allows, otherwise to the next days this week; other days' sessions stay. Moving: ${movingList.join("; ") || "nothing"}.`,
-    week: "Plan the rest of this school week: everything still to do is open to placement.",
+    day: chosen
+      ? `Reschedule day ${chosen} (${shortDate(days[chosen].start)}): only that day's sessions move, elsewhere that day if it allows, otherwise to other days before they're due; other days' sessions stay. Moving: ${movingList.join("; ") || "nothing"}.`
+      : `Reschedule today: only today's remaining sessions move, later today if the day allows, otherwise to the next days; other days' sessions stay. Moving: ${movingList.join("; ") || "nothing"}.`,
+    week: "Plan the rest of this week and next: everything still to do is open to placement.",
     clash: `A new busy time covers these sessions: move just them, as close to their old time as fits. Moving: ${movingList.join("; ") || "nothing"}.`,
+    fill: "New or changed work came in: place only the minutes each task still has to place, around everything already planned, which stays where it is.",
   }[scope.kind];
 
   const plan: Plan = {
@@ -460,7 +496,7 @@ async function rescheduleInto(
     clock: describe(bodyClock),
     preferences,
     days,
-    ids: new Map(open.map((t, n) => [`t${n + 1}`, t])),
+    ids: new Map(open.map((t, n) => [`${n + 1}`, t])),
     busy,
     done,
     keptDeep: perDay(true),
@@ -485,16 +521,50 @@ async function rescheduleInto(
     ? [...allowance.values()].reduce((a, b) => a + b, 0)
     : 1;
   if (plan.ids.size && toPlace > 0) {
-    const response = await claude().messages.parse({
-      model: MODEL,
-      max_tokens: 16000,
-      output_config: { effort: "medium", format: zodOutputFormat(Arrangement) },
-      system: [
-        { type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } },
-      ],
-      messages: [{ role: "user", content: message(plan) }],
-    });
-    placed = check(response.parsed_output?.sessions ?? [], plan);
+    const asked = message(plan);
+    // Reschedule → Week runs on the fast open model (the owner's call for the
+    // stage); everything else, and any failure there, on Sonnet.
+    const askFast = () =>
+      fastAnswer("plan", Arrangement, SYSTEM, asked).catch((error) => {
+        console.error("openrouter plan", error);
+        return null;
+      });
+    let fast = scope.kind === "week" ? await askFast() : null;
+    // No sessions at all with work to place is a slip: ask once more (if it
+    // slips again, code places the work).
+    if (fast && !fast.s.length) fast = await askFast();
+    let answer = fast;
+    if (!answer) {
+      const response = await claude().messages.parse({
+        model: SONNET,
+        max_tokens: 16000,
+        output_config: {
+          effort: "medium",
+          format: zodOutputFormat(Arrangement),
+        },
+        system: [
+          { type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } },
+        ],
+        messages: [{ role: "user", content: asked }],
+      });
+      tally("plan", SONNET, response.usage);
+      answer = response.parsed_output;
+    }
+    const proposals = (answer?.s ?? []).map((x) => ({
+      task: String(x.t),
+      day: x.d,
+      start: x.at,
+      minutes: x.m,
+    }));
+    const dropped: string[] = [];
+    const result = checkAndFill(proposals, plan, dropped);
+    placed = result.placed;
+    const reasons = new Map<string, number>();
+    for (const why of dropped) reasons.set(why, (reasons.get(why) ?? 0) + 1);
+    const counts = [...reasons];
+    console.info(
+      `plan ${scope.kind}${fast ? " (fast)" : ""}: ${proposals.length} proposed, ${placed.length - result.filled} kept, ${result.filled} filled in by code${counts.length ? `; dropped ${counts.map(([why, n]) => `${n} ${why}`).join(", ")}` : ""}`,
+    );
   }
 
   if (movable.length) {
@@ -532,8 +602,9 @@ async function rescheduleInto(
     if (error) throw error;
     undo.remove.blocks.push(...(data ?? []).map((b) => b.id));
   }
-  // 4. Nature suggestions on the days that changed are planned again around
-  // the new plan (all of them when the whole week was planned).
+  // 4. Nature suggestions on the days that changed go (all of them when the
+  // whole week was planned); the page plans them again around the new plan
+  // once this has answered, so the plan never waits on a walk.
   const dayIndex = (at: Zoned) =>
     days.findIndex((_, d) => dateOf(d).equals(at.toPlainDate()));
   const which =
@@ -548,17 +619,13 @@ async function rescheduleInto(
           ...(clash ? [dayIndex(clash.start)] : []),
         ].filter((d) => d >= 0);
   // Extra: if it fails, the plan still stands.
-  const nature = await refreshNature(supabase, {
-    now,
-    hours,
-    days,
-    which,
-  }).catch((error) => {
-    console.error("nature", error);
-    return { added: [], removed: [] };
-  });
-  undo.remove.blocks.push(...nature.added);
-  undo.restore.nature.push(...nature.removed);
+  const cleared = await clearNature(supabase, { now, days, which }).catch(
+    (error) => {
+      console.error("nature", error);
+      return [];
+    },
+  );
+  undo.restore.nature.push(...cleared);
 
   const placedMinutes = placed.reduce((sum, s) => sum + s.minutes, 0);
   const newMinutes = placed.reduce(
@@ -570,14 +637,13 @@ async function rescheduleInto(
     placed: placed.length,
     unplaced: allowance
       ? Math.max(0, toPlace - placedMinutes)
-      : // The whole week: minutes still owed to work due by Saturday.
-        open
-          .filter((t) => t.due.epochMilliseconds <= weekEnd.epochMilliseconds)
-          .reduce((sum, t) => {
-            const got = (done.get(t.id) ?? 0) + (newMinutes.get(t.id) ?? 0);
-            return sum + Math.max(0, (t.minutes ?? 0) - got);
-          }, 0),
+      : // The whole plan: minutes still owed to work due by its last Saturday.
+        open.reduce((sum, t) => {
+          const got = (done.get(t.id) ?? 0) + (newMinutes.get(t.id) ?? 0);
+          return sum + Math.max(0, (t.minutes ?? 0) - got);
+        }, 0),
     changes,
+    walkDays: [...new Set(which)].map((d) => dateOf(d).toString()),
     undo,
   };
 }

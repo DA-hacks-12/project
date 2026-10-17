@@ -3,7 +3,7 @@
 import { PlusIcon } from "@radix-ui/react-icons";
 import { Button, Flex, IconButton } from "@radix-ui/themes";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useKeep } from "@/modules/planner/ui/planner";
 import { AddDialog } from "./AddDialog";
 import type { View } from "./App";
 import styles from "./frame.module.css";
@@ -15,8 +15,8 @@ export function Frame({
   view: View;
   children: React.ReactNode;
 }) {
-  const params = useSearchParams();
-  const keep = params.toString() ? `?${params.toString()}` : "";
+  // Only the demo clock travels; Day and Week each keep their own date.
+  const keep = useKeep();
 
   return (
     <div className={styles.app}>

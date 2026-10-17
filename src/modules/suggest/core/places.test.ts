@@ -24,7 +24,35 @@ test("when every Overpass server fails, finding places throws (the route says so
   const fetchMock = vi.fn(() => Promise.reject(new Error("timeout")));
   vi.stubGlobal("fetch", fetchMock);
   await expect(findPlaces(from.lat, from.lon)).rejects.toThrow(/OpenStreetMap/);
-  expect(fetchMock).toHaveBeenCalledTimes(3);
+  expect(fetchMock).toHaveBeenCalledTimes(4); // every server, at once
+});
+
+test("the first full answer wins, and the area is kept for the next search", async () => {
+  const park = {
+    tags: { name: "Rengstorff Park", leisure: "park" },
+    center: { lat: 10.001, lon: 20.001 },
+  };
+  const fetchMock = vi.fn((url: string) => {
+    if (url.includes("routed-foot")) return Promise.reject(new Error("off"));
+    if (url.includes("overpass-api.de"))
+      return Promise.resolve(new Response("", { status: 504 }));
+    if (url.includes("mail.ru"))
+      return Promise.resolve(
+        Response.json({ elements: [], remark: "runtime error: timed out" }),
+      );
+    return Promise.resolve(Response.json({ elements: [park] }));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const first = await findPlaces(10, 20);
+  expect(first.map((p) => p.name)).toEqual(["Rengstorff Park"]);
+  const asked = fetchMock.mock.calls.filter(
+    ([url]) => !url.includes("routed-foot"),
+  ).length;
+  const again = await findPlaces(10.002, 20.002); // a few hundred metres away
+  expect(again.map((p) => p.name)).toEqual(["Rengstorff Park"]);
+  expect(
+    fetchMock.mock.calls.filter(([url]) => !url.includes("routed-foot")),
+  ).toHaveLength(asked);
 });
 
 test("a place saved before walks still has a walk", () => {

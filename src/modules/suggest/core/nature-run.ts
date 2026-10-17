@@ -9,7 +9,9 @@ import type { Place } from "./places";
 
 // Nature suggestions are planned again on the days that changed: the old ones
 // there (not yet started) go, and Sonnet picks anew around the plan as it now
-// stands. Everything runs as the student under RLS.
+// stands. A reschedule only clears them (`clearNature`) and answers; the page
+// then asks for new ones (`/api/nature`), so no plan waits on a walk.
+// Everything runs as the student under RLS.
 
 type Client = SupabaseClient<Database>;
 
@@ -21,6 +23,45 @@ export interface NatureRestore {
   place: Json;
 }
 
+const within = (at: Zoned, w: Window) =>
+  at.epochMilliseconds >= w.start.epochMilliseconds &&
+  at.epochMilliseconds < w.end.epochMilliseconds;
+
+/** The walks on these days that haven't started go; what Undo needs to put them back. */
+export async function clearNature(
+  supabase: Client,
+  input: { now: Zoned; days: Window[]; which: number[] },
+): Promise<NatureRestore[]> {
+  const { now, days, which } = input;
+  const { data, error } = await supabase
+    .from("blocks")
+    .select("id, start, minutes, title, place")
+    .eq("kind", "nature")
+    .gte("start", iso(now));
+  if (error) throw error;
+  const old = (data ?? []).filter((b) =>
+    which.some(
+      (d) => days[d] && within(zoned(b.start, now.timeZoneId), days[d]),
+    ),
+  );
+  if (old.length) {
+    const { error: deleteError } = await supabase
+      .from("blocks")
+      .delete()
+      .in(
+        "id",
+        old.map((b) => b.id),
+      );
+    if (deleteError) throw deleteError;
+  }
+  return old.map((b) => ({
+    start: b.start,
+    minutes: b.minutes,
+    title: b.title ?? "Outside",
+    place: b.place ?? {},
+  }));
+}
+
 export async function refreshNature(
   supabase: Client,
   input: { now: Zoned; hours: number[]; days: Window[]; which: number[] },
@@ -30,6 +71,8 @@ export async function refreshNature(
   const none = { added: [], removed: [] };
   if (!which.length) return none;
 
+  // The ones that haven't started yet on these days go.
+  const removed = await clearNature(supabase, { now, days, which });
   const [settings, blocksResult] = await Promise.all([
     supabase.from("settings").select("places").maybeSingle(),
     supabase.from("blocks").select("id, kind, start, minutes, title, place"),
@@ -40,44 +83,15 @@ export async function refreshNature(
     const start = zoned(b.start, tz);
     return { ...b, at: start, end: addMinutes(start, b.minutes) };
   });
-  const within = (at: Zoned, w: Window) =>
-    at.epochMilliseconds >= w.start.epochMilliseconds &&
-    at.epochMilliseconds < w.end.epochMilliseconds;
   const overlaps = (b: { at: Zoned; end: Zoned }, w: Window) =>
     b.at.epochMilliseconds < w.end.epochMilliseconds &&
     b.end.epochMilliseconds > w.start.epochMilliseconds;
 
-  // The ones that haven't started yet on these days go.
-  const old = blocks.filter(
-    (b) =>
-      b.kind === "nature" &&
-      b.at.epochMilliseconds >= now.epochMilliseconds &&
-      which.some((d) => within(b.at, days[d])),
-  );
-  if (old.length) {
-    const { error } = await supabase
-      .from("blocks")
-      .delete()
-      .in(
-        "id",
-        old.map((b) => b.id),
-      );
-    if (error) throw error;
-  }
-  const removed = old.map((b) => ({
-    start: b.start,
-    minutes: b.minutes,
-    title: b.title ?? "Outside",
-    place: b.place ?? {},
-  }));
-
   const places = savedPlaces(settings.data?.places);
   if (!places.length) return { added: [], removed };
 
-  // One a day: a day that already has one that started (it stays) gets no more.
-  const started = blocks.filter(
-    (b) => b.kind === "nature" && !old.some((o) => o.id === b.id),
-  );
+  // One a day: a day that already has one (started, so it stays) gets no more.
+  const started = blocks.filter((b) => b.kind === "nature");
   const open = which.filter(
     (d) =>
       !started.some((b) =>

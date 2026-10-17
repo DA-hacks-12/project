@@ -1,7 +1,7 @@
 import "server-only";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { claude, MODEL } from "@/lib/claude";
+import { claude, SONNET, tally } from "@/lib/claude";
 import type { Assignment } from "./feed";
 import { check, type Interpretation } from "./reading";
 
@@ -42,14 +42,15 @@ export async function interpret(
 ): Promise<Interpretation | null> {
   try {
     const response = await claude().messages.parse({
-      model: MODEL,
+      model: SONNET,
       max_tokens: 16000,
-      output_config: { effort: "low", format: zodOutputFormat(Reading) },
+      output_config: { effort: "medium", format: zodOutputFormat(Reading) },
       system: [
         { type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } },
       ],
       messages: [{ role: "user", content: message(assignment) }],
     });
+    tally("read", SONNET, response.usage);
     if (response.stop_reason !== "end_turn" || !response.parsed_output)
       return null;
     return check(response.parsed_output);

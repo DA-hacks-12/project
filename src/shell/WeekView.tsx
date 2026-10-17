@@ -10,14 +10,26 @@ import { Button, Flex, Heading, IconButton } from "@radix-ui/themes";
 import dynamic from "next/dynamic";
 import { iso } from "@/lib/time";
 import { bodyClockOf } from "@/modules/arrange/core/body-clock";
-import { AWAKE } from "@/modules/arrange/core/plan";
-import { dayView, type Item, timeZoneOf } from "@/modules/planner/core/items";
+import { AWAKE, weekFrom } from "@/modules/arrange/core/plan";
+import {
+  dayView,
+  type Item,
+  mayMove,
+  replanSpan,
+  sharpRuns,
+  timeZoneOf,
+} from "@/modules/planner/core/items";
 import type { TaskRow } from "@/modules/planner/core/queries";
-import { useNow, usePlannerData } from "@/modules/planner/ui/planner";
+import {
+  useNow,
+  usePlannerData,
+  useReplanning,
+} from "@/modules/planner/ui/planner";
 import { Block, Due } from "./Block";
 import { useGoToDate, useShownDate } from "./DayView";
 import { ReadingAll } from "./ReadingAll";
 import { Reschedule } from "./Reschedule";
+import { Unplanned } from "./Unplanned";
 import styles from "./week.module.css";
 
 // FullCalendar formats its day headers differently on the server and in the
@@ -35,15 +47,60 @@ export function WeekView() {
   const sunday = shown.subtract({ days: shown.dayOfWeek % 7 });
   const go = useGoToDate();
 
+  const clock = bodyClockOf(planner.settings ?? {});
+  // A plan being made shows on the days it touches: a wave across them.
+  const replanning = useReplanning();
+  const plan = weekFrom(now);
+  // Day can reschedule any of the shown days the plan covers.
+  const ahead = Array.from({ length: 7 }, (_, d) =>
+    sunday.add({ days: d }),
+  ).filter((day) => plan.some((w) => w.start.toPlainDate().equals(day)));
   const events: EventInput[] = [];
+  let wave = 0;
   for (let d = 0; d < 7; d++) {
+    const span = replanning
+      ? replanSpan(
+          replanning,
+          sunday.add({ days: d }),
+          now,
+          plan[plan.length - 1].end,
+        )
+      : null;
+    if (span) {
+      events.push({
+        id: `replan-${d}`,
+        start: iso(span.from),
+        end: iso(span.to),
+        display: "background",
+        className: `${styles.wave} ${styles[`wave${wave % 7}`]} replan-cell`,
+      });
+      wave++;
+    }
+    // The student's sharpest hours, faint behind each day's blocks.
+    for (const [first, end] of sharpRuns(clock)) {
+      const day = sunday.add({ days: d });
+      events.push({
+        id: `sharp-${d}-${first}`,
+        start: `${day}T${String(first).padStart(2, "0")}:00:00`,
+        end:
+          end === 24
+            ? day.add({ days: 1 }).toString()
+            : `${day}T${String(end).padStart(2, "0")}:00:00`,
+        display: "background",
+        className: styles.sharp,
+      });
+    }
     const { items, due } = dayView(planner, sunday.add({ days: d }), now);
     for (const item of items) {
       events.push({
         id: item.key,
         start: iso(item.start),
         end: iso(item.end),
-        extendedProps: { item },
+        // In the data, so the calendar redraws the block when it starts breathing.
+        extendedProps: {
+          item,
+          moving: !!replanning && mayMove(item, replanning, now),
+        },
       });
     }
     for (const task of due) {
@@ -56,7 +113,7 @@ export function WeekView() {
     }
   }
 
-  const { hours } = bodyClockOf(planner.settings ?? {});
+  const { hours } = clock;
   const firstAwake = hours
     ? hours.findIndex((share, h) => h >= 5 && share >= AWAKE)
     : -1;
@@ -93,9 +150,10 @@ export function WeekView() {
             </IconButton>
           </Flex>
           <ReadingAll />
-          <Reschedule />
+          <Reschedule days={ahead} />
         </Flex>
       </Flex>
+      <Unplanned />
       <div className={styles.calendar}>
         <Calendar
           key={sunday.toString()}
@@ -115,12 +173,13 @@ export function WeekView() {
           dayHeaderFormat={{ weekday: "short", day: "numeric" }}
           events={events}
           eventContent={(arg) => {
-            const { item, due } = arg.event.extendedProps as {
+            const { item, due, moving } = arg.event.extendedProps as {
               item?: Item;
               due?: TaskRow;
+              moving?: boolean;
             };
             if (due) return <Due task={due} tz={tz} fill />;
-            return item ? <Block item={item} compact /> : null;
+            return item ? <Block item={item} compact moving={moving} /> : null;
           }}
         />
       </div>

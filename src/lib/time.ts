@@ -51,6 +51,13 @@ export function clock(at: Zoned): string {
   return `${hour}:${String(at.minute).padStart(2, "0")}${at.hour < 12 ? "am" : "pm"}`;
 }
 
+/** "3h", "45m", "1h 30m". */
+export function duration(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  return [h ? `${h}h` : "", m ? `${m}m` : ""].filter(Boolean).join(" ") || "0m";
+}
+
 /** "5:20–6:00pm"; the first am/pm only when they differ ("11:30am–12:15pm"). */
 export function clockRange(start: Zoned, end: Zoned): string {
   const sameHalf = start.hour < 12 === end.hour < 12;

@@ -12,7 +12,15 @@ export const LENGTH: Record<Rest, { min: number; max: number }> = {
   move: { min: 5, max: 15 },
 };
 
-export const LAST_NAP_HOUR = 18; // later naps cost night sleep
+// A nap close to bedtime takes the edge off the sleep pressure that brings
+// sleep on, so the night starts later: none within 7 hours of usual sleep.
+export const NAP_BEFORE_SLEEP = 7 * 60; // minutes
+const DEFAULT_ASLEEP = -60; // 11pm, when the body clock isn't known
+
+/** When naps stop for someone usually asleep at `asleep` (minutes from midnight; negative is the evening before). */
+export function lastNap(asleep = DEFAULT_ASLEEP): number {
+  return (((asleep - NAP_BEFORE_SLEEP) % 1440) + 1440) % 1440;
+}
 
 export function restWords(rest: Rest, minutes: number): string {
   switch (rest) {
@@ -32,13 +40,21 @@ export interface Pick {
   minutes: number;
 }
 
-/** The break to place at `start`, or null when the answer doesn't call for one. */
+/**
+ * The break to place at `start`, or null when the answer doesn't call for one.
+ * `asleep` is when the student usually falls asleep (minutes from midnight).
+ */
 export function checkPick(
   pick: Pick | null,
   start: Zoned,
+  asleep = DEFAULT_ASLEEP,
 ): { rest: Rest; minutes: number } | null {
   if (!pick || pick.kind === "none") return null;
-  if (pick.kind === "nap" && start.hour >= LAST_NAP_HOUR) return null;
+  if (pick.kind === "nap") {
+    const at = start.hour * 60 + start.minute;
+    const beforeSleep = (((asleep - at) % 1440) + 1440) % 1440;
+    if (beforeSleep <= NAP_BEFORE_SLEEP) return null;
+  }
   const { min, max } = LENGTH[pick.kind];
   return {
     rest: pick.kind,

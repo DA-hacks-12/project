@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import ICAL from "ical.js";
 import { Temporal } from "temporal-polyfill";
 
@@ -92,4 +93,14 @@ export function schoolOf(assignments: Assignment[]): string | null {
     } catch {}
   }
   return null;
+}
+
+/** What an assignment's reading depends on: read again only when this changes. */
+export function fingerprint(
+  a: Pick<Assignment, "course" | "title" | "text">,
+): string {
+  return createHash("sha256")
+    .update(`${a.course}\n${a.title}\n${a.text}`)
+    .digest("hex")
+    .slice(0, 16);
 }
