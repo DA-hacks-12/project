@@ -421,17 +421,25 @@ function MapPreview({
   const [hover, setHover] = useState(false);
   if (!place.from) return children;
   return (
-    <HoverCard.Root open={hover && !hidden} onOpenChange={setHover}>
+    // A moment's rest on the block opens it, so passing over doesn't.
+    <HoverCard.Root
+      open={hover && !hidden}
+      onOpenChange={setHover}
+      openDelay={500}
+      closeDelay={150}
+    >
       <HoverCard.Trigger>{children}</HoverCard.Trigger>
       <HoverCard.Content
         width="320px"
         size="1"
-        className={styles.preview}
+        className={`${styles.preview} map-preview`}
         side="top"
         align="start"
         sideOffset={6}
       >
-        <NatureMap from={place.from} place={place} tall />
+        <div className={mapStyles.frame}>
+          <NatureMap from={place.from} place={place} />
+        </div>
         <Flex
           justify="between"
           align="baseline"

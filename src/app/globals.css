@@ -125,3 +125,14 @@ body {
     opacity: 0.7;
   }
 }
+
+/* The walk's map preview fades in and out where it stands: no slide, no grow
+   (Radix's own keyframes, so its exit still ends and the card goes). Here,
+   not in a module, so the keyframe names aren't renamed. */
+.map-preview.rt-PopperContent[data-state="open"] {
+  animation-name: rt-fade-in;
+}
+
+.map-preview.rt-PopperContent[data-state="closed"] {
+  animation-name: rt-fade-out;
+}

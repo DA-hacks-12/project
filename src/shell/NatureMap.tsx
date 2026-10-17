@@ -47,12 +47,9 @@ function routeOf(from: Point, to: Point) {
 export default function NatureMap({
   from,
   place,
-  tall,
 }: {
   from: Point;
   place: Place;
-  /** The hover preview's map: taller, edge to edge. */
-  tall?: boolean;
 }) {
   const [line, setLine] = useState<LatLng[] | null>(null);
   const { lat: fromLat, lon: fromLon } = from;
@@ -79,7 +76,7 @@ export default function NatureMap({
   );
   return (
     <MapContainer
-      className={`${styles.map} ${tall ? styles.tall : ""}`}
+      className={styles.map}
       bounds={[start, end]}
       boundsOptions={{ padding: [24, 24] }}
       zoomControl={false}
@@ -110,12 +107,12 @@ export default function NatureMap({
   );
 }
 
-/** Frames the route once it's known; no Leaflet flag in the credit line. */
+/** Frames the route once it's known, in one step (no pan or zoom to watch); no Leaflet flag in the credit line. */
 function Fit({ points }: { points: LatLng[] }) {
   const map = useMap();
   useEffect(() => {
     map.attributionControl.setPrefix(false);
-    map.fitBounds(points, { padding: [24, 24] });
+    map.fitBounds(points, { padding: [24, 24], animate: false });
   }, [map, points]);
   return null;
 }
