@@ -1,10 +1,26 @@
 # Day planner for Canvas
 
-A day planner for college students on Canvas. It turns their assignments into a plan that fits their body clock, then helps them focus through it. Not a todo app, a chatbot, or a Canvas replacement. Laptop browser.
+Team: Joshua Leonora, Jonathan Bruennert, Atticus Xu
 
-Import a school's Canvas calendar feed, get a week plan that fits your body clock and preferences, reschedule when something goes wrong (with a line of advice), take one walk a day to a real park nearby, and work through each session in focus mode. An optional Chrome extension learns your sleep times from browser history and, with Lockdown on, keeps distracting sites closed during sessions and focus mode. The full spec and vocabulary are in `CLAUDE.md`.
+
+Problem: Canvas has a built in calendar that contains assignment deadlines. The task of creating a schedule around those deadlines, however, still falls on the user, which can be difficult or stressful for students with loaded schedules. Moreover, even after students go through the effort of planning out their day, constant distractions like social media and video platforms hinder productivity and often make those shedules invalid, while physical and mental wellness is neglected as most consider it an afterthought.
+
+Solution: This project aims to solve these problems by dynamically creating a shedule for you based around your assignment deadlines, personal body clock, and study habits. To ensure your wellness, the planner can automatically insert nature breaks in between your tasks, providing you with a map to a nearby park or trail. It can also quickly rearrange your shedule upon request, adapting to the situation, so unexpected circumstances like a family emergency or sick day won't leave you feeling short on time. When you want to work without distraction, the built in focus mode can block distracting sites while providing you with a promodoro timer to help you pace your studying.
+
 
 ## Setup
+
+<u>For Judging and demo:</u>
+
+We already have an instance up and running if you want to test the program without setting up a local version yourself.
+
+Go to https://dahacksproj.vercel.app/login
+
+This project includes a dummy user authentication system so you can use your own calendars without conflicting with us or other testers. Enter an email (doesn't have to be a real one) and use the password `aa124a3` (same for all accounts). Sample calendar is included below.
+
+
+
+<u>To run the project yourself:</u>
 
 You need [Bun](https://bun.sh), [Supabase CLI](https://supabase.com/docs/guides/local-development), a Docker runtime (OrbStack or Docker Desktop), and an Anthropic API key.
 
@@ -15,32 +31,43 @@ You need [Bun](https://bun.sh), [Supabase CLI](https://supabase.com/docs/guides/
 
 After a schema change: `supabase db reset` (wipes local data), then `bun run db:types`.
 
-## Try it with the mock schools
-
-Paste either link into Options, under Canvas:
-
-- http://localhost:3000/mock/state.ics (Mock State University, 23 entries)
-- http://localhost:3000/mock/college.ics (Mock Community College, 6 entries)
-
-Dates are relative to today, spread over this calendar week and the next (the span a plan covers). `?at=HH:MM` on any page pins "now". The first Reschedule asks the browser for your location, to find parks for the walks.
-
 ## Chrome extension (optional)
+
+The chrome extension uses your browser history to calculate your sleed schedule and is what enables the site block feature.
 
 Open `chrome://extensions`, turn on Developer mode, choose Load unpacked, and pick the `extension/` folder. Reload the app. Options then shows the extension as connected and your body clock learned from your browser; turn on Lockdown in Options, under Focus.
 
-## Checks
+## Sample calendar
 
-    bun run lint && bun run typecheck && bun run test && bun run build
+Go to `Options > canvas`, paste in the link and click "add" 
 
-With Supabase and the dev server running:
+- http://dahacksproj.vercel.app/mock/college.ics 
 
-- `bun run e2e` plays real visitors against the mock schools (about a cent of Claude Haiku per run).
-- `bun scripts/e2e-ui.ts` drives Chrome through every screen and saves screenshots to `.e2e-ui/`. It needs Chrome installed.
+## Usage
 
-## Deploying
+> The app will ask for your location as part of the park/trail feature.
 
-Not set up yet. When it is:
+### <u>Options</u>
 
-- Set the environment variables from `.env.example` on the host (Vercel), pointing at a hosted Supabase project with the migrations applied.
-- Add the deployed address to the content script `matches` in `extension/manifest.json` (it only lists localhost:3000 and 127.0.0.1:3000), then reload the extension.
-- Sign-in by email alone means anyone can open anyone's planner; put real authentication in before real students use it.
+<b>Body clock</b><br>
+Here you can view/adjust your body clock
+
+
+<b>Preferences</b><br>
+Adjust scheduling preferences
+
+
+<b>Focus</b><br>
+Adjust your promodoro timer here. The `lockdown` toggle enables site blocking for distracting sites when the extension is installed
+
+
+<b>Account</b><br>
+The currently connected email
+
+### <u>Reschedule</u>
+
+Adjusts your shedule according to your prompt. Try "I'm sick today and can't work as much" or "I have a meeting from 5-6"
+
+
+
+
