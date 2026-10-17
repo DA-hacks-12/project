@@ -13,6 +13,7 @@ import {
   type Zoned,
   zoned,
 } from "@/lib/time";
+import { classTimes } from "@/modules/classes/core/classes";
 import type { Work } from "@/modules/import/core/reading";
 import type { Changes } from "@/modules/suggest/core/changes";
 import {
@@ -51,7 +52,9 @@ export type Scope =
   | { kind: "week" }
   | { kind: "clash"; start: string; end: string }
   // After an import: place only the work not planned yet; nothing moves.
-  | { kind: "fill" };
+  | { kind: "fill" }
+  // After the class schedule changes: just the sessions a class now covers.
+  | { kind: "classes" };
 
 const SYSTEM = `You place a college student's coursework into work sessions within this school week and the next (through Saturday of next week).
 
@@ -161,7 +164,7 @@ async function rescheduleInto(
       : 0,
   );
 
-  const [tasksResult, blocksResult, limitsResult, dismissalsResult] =
+  const [tasksResult, blocksResult, limitsResult, dismissalsResult, classRows] =
     await Promise.all([
       supabase
         .from("tasks")
@@ -173,9 +176,24 @@ async function rescheduleInto(
         .select("id, kind, start, minutes, task_id, rest, title, done"),
       supabase.from("day_limits").select("id, day, minutes, deep"),
       supabase.from("dismissals").select("task_id, at"),
+      supabase
+        .from("classes")
+        .select("id, title, days, start, minutes, place, starts_on, ends_on"),
     ]);
-  for (const r of [tasksResult, blocksResult, limitsResult, dismissalsResult])
+  for (const r of [
+    tasksResult,
+    blocksResult,
+    limitsResult,
+    dismissalsResult,
+    classRows,
+  ])
     if (r.error) throw r.error;
+  // The student's classes over the plan's days: fixed, like their events.
+  const classes = classTimes(
+    classRows.data ?? [],
+    days[0].start,
+    days[days.length - 1].end,
+  );
   const taskRows = tasksResult.data ?? [];
   const blocks = (blocksResult.data ?? []).map((b) => ({
     ...b,
@@ -356,6 +374,8 @@ async function rescheduleInto(
         return future && !!clash && inWindow(b, clash.start, clash.end);
       case "fill":
         return false;
+      case "classes":
+        return future && classes.some((c) => inWindow(b, c.start, c.end));
       default:
         return false;
     }
@@ -429,6 +449,11 @@ async function rescheduleInto(
     .sort((a, b) => a.due.epochMilliseconds - b.due.epochMilliseconds);
 
   const busy: Span[] = [
+    ...classes.map((c) => ({
+      start: c.start,
+      end: c.end,
+      label: c.rule.title,
+    })),
     // Nature suggestions never block anything: they're planned again after.
     ...blocks
       .filter((b) => b.kind !== "session" && b.kind !== "nature")
@@ -488,6 +513,7 @@ async function rescheduleInto(
     week: "Plan the rest of this week and next: everything still to do is open to placement.",
     clash: `A new busy time covers these sessions: move just them, as close to their old time as fits. Moving: ${movingList.join("; ") || "nothing"}.`,
     fill: "New or changed work came in: place only the minutes each task still has to place, around everything already planned, which stays where it is.",
+    classes: `The student's classes now cover these sessions: move just them, as close to their old time as fits, never over a class. Moving: ${movingList.join("; ") || "nothing"}.`,
   }[scope.kind];
 
   const plan: Plan = {
@@ -617,6 +643,10 @@ async function rescheduleInto(
           ...(found?.lighter ?? []).map((l) => l.day),
           ...(found?.rest ? [0] : []),
           ...(clash ? [dayIndex(clash.start)] : []),
+          // Walks a class now covers are planned again too.
+          ...(scope.kind === "classes"
+            ? classes.map((c) => dayIndex(c.start))
+            : []),
         ].filter((d) => d >= 0);
   // Extra: if it fails, the plan still stands.
   const cleared = await clearNature(supabase, { now, days, which }).catch(

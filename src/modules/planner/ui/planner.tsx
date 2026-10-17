@@ -148,9 +148,22 @@ export const useMoveSession = () =>
 
 /** What a time set by hand would clash with (see conflicts.ts). */
 export function useConflict() {
-  const { blocks, tasks } = usePlannerData();
-  return (placing: Placing) => conflictOf(placing, blocks, tasks);
+  const { blocks, tasks, classes } = usePlannerData();
+  return (placing: Placing) => conflictOf(placing, blocks, tasks, classes);
 }
+
+/** A class schedule read (Sonnet), its new classes added, and the work they cover moved. */
+export const useReadSchedule = () =>
+  useServerCall<
+    { mediaType: string; data: string; at?: string },
+    { classes: number; moved: number; walkDays: string[] }
+  >("/api/classes");
+
+export const useDeleteClass = () =>
+  usePlannerMutation<{ id: string }>(
+    (db, { id }) => q.deleteClass(db, id),
+    (p, { id }) => ({ ...p, classes: p.classes.filter((c) => c.id !== id) }),
+  );
 
 /** Only the demo clock (`?at=`) travels between screens; each view keeps its own date. */
 export function useKeep(): string {

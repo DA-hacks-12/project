@@ -10,7 +10,7 @@
     "format": "biome check --write",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "db:types": "supabase gen types typescript --local --schema public > src/lib/supabase/database.types.ts",
+    "db:types": "supabase gen types typescript --db-url postgresql://postgres:postgres@127.0.0.1:54422/postgres --schema public > src/lib/supabase/database.types.ts",
     "e2e": "bun scripts/e2e.ts"
   },
   "packageManager": "bun@1.4.0",

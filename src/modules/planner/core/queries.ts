@@ -12,6 +12,7 @@ export type BlockRow = Tables<"blocks">;
 export type Settings = Tables<"settings">;
 export type Feed = Tables<"feeds">;
 export type DayLimit = Tables<"day_limits">;
+export type ClassRow = Tables<"classes">;
 
 export interface Planner {
   email: string | null;
@@ -20,18 +21,21 @@ export interface Planner {
   tasks: TaskRow[];
   blocks: BlockRow[];
   limits: DayLimit[];
+  classes: ClassRow[];
 }
 
 export async function fetchPlanner(db: Db): Promise<Planner> {
-  const [user, settings, feeds, tasks, blocks, limits] = await Promise.all([
-    db.auth.getUser(),
-    db.from("settings").select("*").maybeSingle(),
-    db.from("feeds").select("*").order("name"),
-    db.from("tasks").select("*").order("due"),
-    db.from("blocks").select("*").order("start"),
-    db.from("day_limits").select("*").order("day"),
-  ]);
-  for (const result of [settings, feeds, tasks, blocks, limits])
+  const [user, settings, feeds, tasks, blocks, limits, classes] =
+    await Promise.all([
+      db.auth.getUser(),
+      db.from("settings").select("*").maybeSingle(),
+      db.from("feeds").select("*").order("name"),
+      db.from("tasks").select("*").order("due"),
+      db.from("blocks").select("*").order("start"),
+      db.from("day_limits").select("*").order("day"),
+      db.from("classes").select("*").order("start"),
+    ]);
+  for (const result of [settings, feeds, tasks, blocks, limits, classes])
     if (result.error) throw result.error;
   return {
     email: user.data.user?.email ?? null,
@@ -40,6 +44,7 @@ export async function fetchPlanner(db: Db): Promise<Planner> {
     tasks: tasks.data ?? [],
     blocks: blocks.data ?? [],
     limits: limits.data ?? [],
+    classes: classes.data ?? [],
   };
 }
 
@@ -94,6 +99,11 @@ export async function moveSession(
   time: { start: string; minutes: number },
 ) {
   check((await db.from("blocks").update(time).eq("id", id)).error);
+}
+
+/** A class, removed: its time is free again from the next reschedule on. */
+export async function deleteClass(db: Db, id: string) {
+  check((await db.from("classes").delete().eq("id", id)).error);
 }
 
 export async function deleteBlock(db: Db, id: string) {

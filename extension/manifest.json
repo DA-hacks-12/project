@@ -20,7 +20,7 @@
   "content_scripts": [
     {
       "matches": [
-        "https://planner-eta-brown-56.vercel.app/*",
+        "https://dahacksproj.vercel.app/*",
         "http://localhost:3000/*",
         "http://127.0.0.1:3000/*"
       ],

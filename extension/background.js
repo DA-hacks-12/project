@@ -9,7 +9,7 @@ import { activeHours, sleepTimes } from "./activity.js";
 const DAYS = 28;
 const BLOCK_RULE = 1;
 // The app online; a local one is learned from its own messages.
-const DEFAULT_APP = "https://planner-eta-brown-56.vercel.app";
+const DEFAULT_APP = "https://dahacksproj.vercel.app";
 const BLOCKED = chrome.runtime.getURL("blocked.html");
 const VERDICTS = ["study", "distraction", "unsure"];
 const FROM_APP = new Set(["ping", "activity", "focus", "unfocus", "sync"]);

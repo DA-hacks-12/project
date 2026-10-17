@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { addMinutes, iso, type Zoned, zoned } from "@/lib/time";
 import type { Window } from "@/modules/arrange/core/plan";
+import { classTimes } from "@/modules/classes/core/classes";
 import type { NatureDay } from "./nature";
 import { pickNature } from "./nature-pick";
 import type { Place } from "./places";
@@ -73,11 +74,21 @@ export async function refreshNature(
 
   // The ones that haven't started yet on these days go.
   const removed = await clearNature(supabase, { now, days, which });
-  const [settings, blocksResult] = await Promise.all([
+  const [settings, blocksResult, classRows] = await Promise.all([
     supabase.from("settings").select("places").maybeSingle(),
     supabase.from("blocks").select("id, kind, start, minutes, title, place"),
+    supabase
+      .from("classes")
+      .select("id, title, days, start, minutes, place, starts_on, ends_on"),
   ]);
   if (blocksResult.error) throw blocksResult.error;
+  if (classRows.error) throw classRows.error;
+  // Classes are busy for a walk like any other plan.
+  const classes = classTimes(
+    classRows.data ?? [],
+    days[0].start,
+    days[days.length - 1].end,
+  ).map((c) => ({ at: c.start, end: c.end }));
   const tz = now.timeZoneId;
   const blocks = (blocksResult.data ?? []).map((b) => {
     const start = zoned(b.start, tz);
@@ -107,7 +118,9 @@ export async function refreshNature(
     return {
       day: d,
       window: days[d],
-      busy: busy.map((b) => ({ start: b.at, end: b.end })),
+      busy: [...busy, ...classes.filter((c) => overlaps(c, days[d]))].map(
+        (b) => ({ start: b.at, end: b.end }),
+      ),
       work: busy
         .filter((b) => b.kind === "session")
         .reduce((sum, b) => sum + b.minutes, 0),

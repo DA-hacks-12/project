@@ -5,11 +5,13 @@ import {
   isSharp,
   sharpestText,
 } from "@/modules/arrange/core/body-clock";
+import { type ClassRule, classesOn } from "@/modules/classes/core/classes";
 import { type NatureStop, natureStopOf } from "@/modules/suggest/core/places";
 import type { BlockRow, Planner, TaskRow } from "./queries";
 
 // What a day shows: its blocks (sessions, breaks, the student's events, nature
-// suggestions) and the assignments due that day. Plain code, the same every time.
+// suggestions), the classes that meet that day, and the assignments due that
+// day. Plain code, the same every time.
 
 interface Timed {
   key: string;
@@ -21,7 +23,8 @@ export type Item =
   | (Timed & { kind: "session"; block: BlockRow; task: TaskRow | undefined })
   | (Timed & { kind: "break"; block: BlockRow })
   | (Timed & { kind: "event"; block: BlockRow })
-  | (Timed & { kind: "nature"; block: BlockRow; place: NatureStop });
+  | (Timed & { kind: "nature"; block: BlockRow; place: NatureStop })
+  | (Timed & { kind: "class"; rule: ClassRule });
 
 export interface DayView {
   items: Item[];
@@ -63,6 +66,8 @@ export function dayView(
       if (place) items.push({ ...base, kind: "nature", place });
     } else items.push({ ...base, kind: "event" });
   }
+  for (const time of classesOn(planner.classes ?? [], date, tz))
+    items.push({ ...time, kind: "class" });
 
   items.sort((a, b) => a.start.epochMilliseconds - b.start.epochMilliseconds);
 
@@ -215,6 +220,8 @@ export function titleOf(item: Item): string {
       return item.block.title ?? "Event";
     case "nature":
       return item.place.name;
+    case "class":
+      return item.rule.title;
   }
 }
 

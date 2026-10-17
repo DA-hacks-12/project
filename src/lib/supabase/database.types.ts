@@ -25,6 +25,20 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"classes": {
+                  Row: {
+                    "created_at": string,"days": (number)[],"ends_on": string | null,"id": string,"minutes": number,"owner_id": string,"place": string | null,"start": string,"starts_on": string | null,"title": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"days": (number)[],"ends_on"?: string | null,"id"?: string,"minutes": number,"owner_id"?: string,"place"?: string | null,"start": string,"starts_on"?: string | null,"title": string
+                  }
+                  Update: {
+                    "created_at"?: string,"days"?: (number)[],"ends_on"?: string | null,"id"?: string,"minutes"?: number,"owner_id"?: string,"place"?: string | null,"start"?: string,"starts_on"?: string | null,"title"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"day_limits": {
                   Row: {
                     "day": string,"deep": boolean,"id": string,"minutes": number,"owner_id": string

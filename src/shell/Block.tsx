@@ -62,6 +62,7 @@ const KIND_CLASS: Record<Item["kind"], string> = {
   break: styles.break,
   event: styles.event,
   nature: styles.nature,
+  class: styles.event, // a class is one of the student's fixed plans, like an event
 };
 
 /** Any block on the calendar, in one solid color. Clicking it opens its card in place. */
@@ -156,7 +157,19 @@ function BlockCard({
       return <BreakCard item={item} />;
     case "nature":
       return <NatureCard item={item} />;
+    case "class":
+      return <ClassCard item={item} />;
   }
+}
+
+/** A class, from the schedule uploaded in Options (changed there, not here). */
+function ClassCard({ item }: { item: Extract<Item, { kind: "class" }> }) {
+  return (
+    <Flex direction="column" gap="2">
+      <Heading size="3">{item.rule.title}</Heading>
+      <When item={item} extra={item.rule.place ?? undefined} />
+    </Flex>
+  );
 }
 
 function When({ item, extra }: { item: Item; extra?: string }) {

@@ -1,5 +1,6 @@
 import type { createClient } from "@/lib/supabase/server";
 import { addMinutes, iso, type Zoned, zoned } from "@/lib/time";
+import { classTimes } from "@/modules/classes/core/classes";
 import { isMockSchool } from "@/modules/import/core/mock";
 import type { Work } from "@/modules/import/core/reading";
 import { bodyClockOf } from "./body-clock";
@@ -70,7 +71,7 @@ export async function fillWeekSoFar(
   supabase: Client,
   nowDate: Date,
 ): Promise<number> {
-  const [settings, feeds, tasks, blocks] = await Promise.all([
+  const [settings, feeds, tasks, blocks, classRows] = await Promise.all([
     supabase.from("settings").select("time_zone, nights, clock").maybeSingle(),
     supabase.from("feeds").select("id, name"),
     supabase
@@ -79,8 +80,11 @@ export async function fillWeekSoFar(
         "id, feed_id, title, course, deliverable, due, minutes, work, read",
       ),
     supabase.from("blocks").select("kind, start, minutes, task_id"),
+    supabase
+      .from("classes")
+      .select("id, title, days, start, minutes, place, starts_on, ends_on"),
   ]);
-  for (const r of [feeds, tasks, blocks]) if (r.error) throw r.error;
+  for (const r of [feeds, tasks, blocks, classRows]) if (r.error) throw r.error;
   const mock = new Set(
     (feeds.data ?? []).filter((f) => isMockSchool(f.name)).map((f) => f.id),
   );
@@ -115,17 +119,25 @@ export async function fillWeekSoFar(
     }));
   if (!open.length) return 0;
 
-  const busy: Span[] = (blocks.data ?? [])
-    .filter((b) => b.kind !== "nature")
-    .map((b) => {
-      const start = zoned(b.start, tz);
-      return {
-        start,
-        end: addMinutes(start, b.minutes),
-        label: b.kind,
-        session: b.kind === "session",
-      };
-    });
+  const busy: Span[] = [
+    ...(blocks.data ?? [])
+      .filter((b) => b.kind !== "nature")
+      .map((b) => {
+        const start = zoned(b.start, tz);
+        return {
+          start,
+          end: addMinutes(start, b.minutes),
+          label: b.kind,
+          session: b.kind === "session",
+        };
+      }),
+    // Done work was never in class.
+    ...classTimes(classRows.data ?? [], sunday, now).map((c) => ({
+      start: c.start,
+      end: c.end,
+      label: c.rule.title,
+    })),
+  ];
   const placed = weekSoFar(
     open,
     now,

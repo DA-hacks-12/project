@@ -33,12 +33,13 @@ import {
   useSaveFocusSettings,
   useSavePreferences,
 } from "@/modules/planner/ui/planner";
+import { Classes } from "./Classes";
 import { Feeds } from "./Feeds";
 import styles from "./options.module.css";
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
-/** Options, as its own page: schools, the body clock, preferences, focus and the account. */
+/** Options, as its own page: schools, classes, the body clock, preferences, focus and the account. */
 export function Options() {
   return (
     <Flex direction="column" gap="5" className={styles.page}>
@@ -47,6 +48,10 @@ export function Options() {
       </Heading>
       <Section title="Canvas">
         <Feeds />
+      </Section>
+      <Separator size="4" />
+      <Section title="Classes">
+        <Classes />
       </Section>
       <Separator size="4" />
       <Section title="Body clock">
