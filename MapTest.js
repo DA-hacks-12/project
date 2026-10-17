@@ -24,7 +24,7 @@
 		if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return false;
 
 		if (currentLat !== null && currentLon !== null) {
-			location.href = `https://www.openstreetmap.org/directions?engine=osrm_foot&route=${currentLat}%2C${currentLon}%3B${latitude}%2C${longitude}#map=15/${latitude}/${longitude}`;
+			location.href = `https://www.openstreetmap.org/directions?engine=fossgis_osrm_foot&route=${currentLat}%2C${currentLon}%3B${latitude}%2C${longitude}#map=15/${latitude}/${longitude}`;
 		} else {
 			location.href = `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=15/${latitude}/${longitude}`;
 		}
@@ -109,7 +109,9 @@
 			}
 
 			try {
-				const response = await fetch(`https://router.project-osrm.org/route/v1/foot/${currentLon},${currentLat};${longitude},${latitude}?overview=full&geometries=geojson`);
+				// Walking: OpenStreetMap's own foot router. The public OSRM demo ignores
+				// "foot" and answers with the driving route.
+				const response = await fetch(`https://routing.openstreetmap.de/routed-foot/route/v1/driving/${currentLon},${currentLat};${longitude},${latitude}?overview=full&geometries=geojson`);
 				if (response.ok) {
 					const data = await response.json();
 					if (data.routes && data.routes.length > 0) {
