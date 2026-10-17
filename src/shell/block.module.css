@@ -185,6 +185,8 @@
 .preview {
   padding: 0;
   overflow: hidden;
+  /* Nothing in it to point at: the pointer reaches the walk underneath. */
+  pointer-events: none;
 }
 
 .previewLabel {

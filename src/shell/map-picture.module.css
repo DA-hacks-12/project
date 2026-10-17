@@ -1,0 +1,68 @@
+/* A walk's map, still: the basemap stepped back into the dark sheet so the
+   route and the two points carry it, flat, in the app's colors. */
+.picture {
+  position: relative;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+/* In the walk's card: rounded, with a hairline, inside the card's padding. */
+.card {
+  border-radius: var(--radius-2);
+}
+
+.card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--hairline);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.base {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.6;
+}
+
+.over {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.route {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2.5;
+  stroke-opacity: 0.85;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.from {
+  fill: var(--ink);
+  stroke: var(--paper);
+  stroke-width: 2;
+}
+
+.place {
+  fill: var(--jade-9);
+  stroke: var(--paper);
+  stroke-width: 2;
+}
+
+/* The credit: small quiet text in the corner, no box. */
+.credit {
+  position: absolute;
+  right: 6px;
+  bottom: 2px;
+  color: var(--faint);
+  font-size: 9px;
+  line-height: 14px;
+  pointer-events: none;
+}

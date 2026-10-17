@@ -64,7 +64,6 @@ body {
 }
 
 .rt-PopoverContent,
-.rt-HoverCardContent,
 .rt-DialogContent {
   box-shadow: none;
   border: 1px solid var(--edge);
@@ -126,18 +125,28 @@ body {
   }
 }
 
-/* The walk's map preview fades in and out where it stands: no slide, no grow
-   (Radix's own keyframes, so its exit still ends and the card goes). Here,
-   not in a module, so the keyframe names aren't renamed. */
-.map-preview.rt-PopperContent[data-state="open"] {
-  animation-name: rt-fade-in;
+/* The walk's map preview: the floating card's look (flat, a gray edge), on
+   Radix's tooltip so it holds still. Only an opening after a rest fades in;
+   the next walk's swaps in at once and a closing one goes at once, so two
+   are never on screen and nothing travels. Here, not in a module, so Radix's
+   keyframe name isn't renamed. */
+/* Nothing in it to point at: the pointer passes through it, and through the
+   box Radix positions it in, to the walk underneath (the next day's, in
+   Week). Without the box too, a hop onto the next walk lands on the box, the
+   first preview closes, and the next walk never hears the pointer arrive. */
+[data-radix-popper-content-wrapper]:has(> .map-preview) {
+  pointer-events: none;
 }
 
-.map-preview.rt-PopperContent[data-state="closed"] {
-  animation-name: rt-fade-out;
+.map-preview {
+  overflow: hidden;
+  background: var(--color-panel-solid);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-4);
 }
 
-/* Closed by a scroll: gone at once, so it never moves as it fades. */
-.map-preview-scrolled.rt-PopperContent[data-state="closed"] {
-  animation-name: none;
+@media (prefers-reduced-motion: no-preference) {
+  .map-preview[data-state="delayed-open"] {
+    animation: rt-fade-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
 }

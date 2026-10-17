@@ -3,6 +3,7 @@ import "./globals.css";
 import { Theme } from "@radix-ui/themes";
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
+import { preconnect } from "react-dom";
 
 export const metadata: Metadata = {
   title: "Planner",
@@ -15,6 +16,9 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // The walks' map tiles: the connection is opened as the page loads, so a
+  // slow one is paid for before anyone points at a walk.
+  preconnect("https://server.arcgisonline.com", { crossOrigin: "anonymous" });
   return (
     <html lang="en" className={`dark ${geist.variable}`}>
       <body>

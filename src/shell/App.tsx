@@ -1,6 +1,7 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Tooltip } from "radix-ui";
 import { useEffect, useRef, useState } from "react";
 import { activityFromExtension } from "@/modules/extension/ui/bridge";
 import { isPlanning } from "@/modules/planner/core/items";
@@ -42,15 +43,19 @@ export function App({
           {view === "focus" && focus ? (
             <Focus id={focus} />
           ) : (
-            <Frame view={view}>
-              {view === "week" ? (
-                <WeekView />
-              ) : view === "options" ? (
-                <Options />
-              ) : (
-                <DayView />
-              )}
-            </Frame>
+            // One timing for the walks' map previews: a half-second rest opens
+            // one; within 300 ms of it closing, the next opens at once.
+            <Tooltip.Provider delayDuration={500} skipDelayDuration={300}>
+              <Frame view={view}>
+                {view === "week" ? (
+                  <WeekView />
+                ) : view === "options" ? (
+                  <Options />
+                ) : (
+                  <DayView />
+                )}
+              </Frame>
+            </Tooltip.Provider>
           )}
         </Loaded>
       </LastRescheduleProvider>

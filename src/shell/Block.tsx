@@ -5,13 +5,13 @@ import {
   Checkbox,
   Flex,
   Heading,
-  HoverCard,
   Link,
   Popover,
   Text,
+  Theme,
 } from "@radix-ui/themes";
-import dynamic from "next/dynamic";
 import NextLink from "next/link";
+import { Tooltip } from "radix-ui";
 import { type CSSProperties, useEffect, useState } from "react";
 import { Temporal } from "temporal-polyfill";
 import { clock, clockRange, duration, shortDate, zoned } from "@/lib/time";
@@ -47,15 +47,15 @@ import { directionsLink } from "@/modules/suggest/core/walk";
 import { AskInPlace } from "./AskInPlace";
 import styles from "./block.module.css";
 import { EventForm, useDraftGuard } from "./EventForm";
-import mapStyles from "./nature-map.module.css";
+import {
+  CardMap,
+  MapPicture,
+  type Picture,
+  preparePicture,
+  preparePictureAhead,
+} from "./MapPicture";
 import { RescheduleForm } from "./RescheduleForm";
 import { Tree } from "./Tree";
-
-// Leaflet needs the browser: the map loads client-only, in a space its size.
-const NatureMap = dynamic(() => import("./NatureMap"), {
-  ssr: false,
-  loading: () => <div className={mapStyles.space} />,
-});
 
 const KIND_CLASS: Record<Item["kind"], string> = {
   session: styles.session,
@@ -405,9 +405,18 @@ function BreakCard({ item }: { item: Extract<Item, { kind: "break" }> }) {
 }
 
 /**
- * Pointing at a nature suggestion previews it: the map with the walking route,
- * and the place's name under it. After Altay's map location preview (his map
- * test on the mapIntegration branch), with the walk measured on foot.
+ * Pointing at a nature suggestion previews it: a still map of the walk and
+ * the place's name. After Altay's map location preview (his map test on the
+ * mapIntegration branch), with the walk measured on foot.
+ *
+ * It must hold still, so it's a tooltip in Radix's sense (one timing for all
+ * walks, `Tooltip.Provider` in App): half a second's rest opens it, with a
+ * fade; moving on to the next walk soon after swaps the next one in at once,
+ * with no fade either way; a click closes it until the pointer comes back;
+ * scrolling what holds the walk closes it. Its picture is made in full when
+ * the pointer arrives and it opens only once that's ready, so nothing in it
+ * moves. It sits where the walk's card opens: to the right, flipping left at
+ * the edge.
  */
 function MapPreview({
   place,
@@ -418,60 +427,68 @@ function MapPreview({
   hidden: boolean;
   children: React.ReactNode;
 }) {
-  const [hover, setHover] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
-  const open = hover && !hidden;
-  // Any scroll closes it at once (no fade), so it never chases its block or
-  // flips sides.
+  const [wanted, setWanted] = useState(false);
+  // The picture, or false when it couldn't be made (the name and walk alone).
+  const [picture, setPicture] = useState<Picture | false | null>(null);
+  // Radix decides open and closed; the card is only drawn once its picture is
+  // ready. (Holding `open` back instead left Radix and this out of step: a
+  // walk the pointer had left would open when its picture arrived.)
+  const open = wanted && !hidden;
+  const from = place.from;
   useEffect(() => {
-    if (!open) return;
-    const close = () => {
-      setScrolled(true);
-      setHover(false);
-    };
-    window.addEventListener("scroll", close, { capture: true, passive: true });
-    return () => window.removeEventListener("scroll", close, { capture: true });
-  }, [open]);
-  if (!place.from) return children;
+    if (from) preparePictureAhead(from, place);
+  }, [from, place]);
+  if (!from) return children;
+  const prepare = () => {
+    // A picture already on screen stays as it is.
+    if (open) return;
+    preparePicture(from, place)
+      .then(setPicture)
+      .catch(() => setPicture((p) => p ?? false));
+  };
   return (
-    // A moment's rest on the block opens it, so passing over doesn't.
-    <HoverCard.Root
-      open={open}
-      onOpenChange={(value) => {
-        if (value) setScrolled(false);
-        setHover(value);
-      }}
-      openDelay={500}
-      closeDelay={150}
-    >
-      <HoverCard.Trigger>{children}</HoverCard.Trigger>
-      <HoverCard.Content
-        width="320px"
-        size="1"
-        className={`${styles.preview} map-preview ${scrolled ? "map-preview-scrolled" : ""}`}
-        side="top"
-        align="start"
-        sideOffset={6}
+    // Nothing in it to point at: the pointer passes through it to the walk
+    // underneath (the next day's, in Week), and leaving the walk closes it.
+    <Tooltip.Root open={open} onOpenChange={setWanted} disableHoverableContent>
+      <Tooltip.Trigger
+        asChild
+        onPointerEnter={prepare}
+        // Focus coming back from the walk's card doesn't open it.
+        onFocus={(event) => event.preventDefault()}
       >
-        <div className={mapStyles.frame}>
-          <NatureMap from={place.from} place={place} />
-        </div>
-        <Flex
-          justify="between"
-          align="baseline"
-          gap="3"
-          className={styles.previewLabel}
-        >
-          <Text size="2" weight="medium" className={styles.previewName}>
-            {place.name}
-          </Text>
-          <Text size="1" color="gray" wrap="nowrap">
-            {place.walk?.estimate ? "About " : ""}
-            {walkMinutes(place)} min walk
-          </Text>
-        </Flex>
-      </HoverCard.Content>
-    </HoverCard.Root>
+        {children}
+      </Tooltip.Trigger>
+      {picture !== null && (
+        <Tooltip.Portal>
+          <Theme asChild>
+            <Tooltip.Content
+              side="right"
+              align="start"
+              sideOffset={8}
+              collisionPadding={12}
+              className={`${styles.preview} map-preview`}
+              aria-label={`${place.name}, ${walkMinutes(place)} min walk`}
+            >
+              {picture && <MapPicture picture={picture} />}
+              <Flex
+                justify="between"
+                align="baseline"
+                gap="3"
+                className={styles.previewLabel}
+              >
+                <Text size="2" weight="medium" className={styles.previewName}>
+                  {place.name}
+                </Text>
+                <Text size="1" color="gray" wrap="nowrap">
+                  {place.walk?.estimate ? "About " : ""}
+                  {walkMinutes(place)} min walk
+                </Text>
+              </Flex>
+            </Tooltip.Content>
+          </Theme>
+        </Tooltip.Portal>
+      )}
+    </Tooltip.Root>
   );
 }
 
@@ -482,7 +499,7 @@ function NatureCard({ item }: { item: Extract<Item, { kind: "nature" }> }) {
   const walk = walkMinutes(place);
   return (
     <Flex direction="column" gap="2">
-      {place.from ? <NatureMap from={place.from} place={place} /> : <Tree />}
+      {place.from ? <CardMap from={place.from} place={place} /> : <Tree />}
       <Heading size="3">{place.name}</Heading>
       <When item={item} />
       <Text as="p" size="2" color="gray">
