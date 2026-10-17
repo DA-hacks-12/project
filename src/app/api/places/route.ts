@@ -11,9 +11,14 @@ import { findPlaces } from "@/modules/suggest/core/places";
 // an import's plan to finish.
 export const maxDuration = 180;
 
+// Where the student is: the browser's position when it gives one; else the
+// approximate place their connection comes from (Vercel's own geolocation
+// headers, about city-level, no permission needed), so a browser or a Mac
+// that won't share a location still gets walks. From there, walks are
+// marked as estimates ("About 12 min walk").
 const Body = z.object({
-  lat: z.number().min(-90).max(90),
-  lon: z.number().min(-180).max(180),
+  lat: z.number().min(-90).max(90).optional(),
+  lon: z.number().min(-180).max(180).optional(),
   // `at` pins the clock for demos, in the student's time zone.
   at: z
     .string()
@@ -29,8 +34,33 @@ export async function POST(request: Request) {
   const { data } = await supabase.auth.getUser();
   if (!data.user)
     return Response.json({ error: "signed out" }, { status: 401 });
+  const fromIp = (name: string) => {
+    const value = Number(decodeURIComponent(request.headers.get(name) ?? ""));
+    return request.headers.has(name) && Number.isFinite(value) ? value : null;
+  };
+  const browser =
+    body.data.lat !== undefined && body.data.lon !== undefined
+      ? { lat: body.data.lat, lon: body.data.lon }
+      : null;
+  const ipLat = fromIp("x-vercel-ip-latitude");
+  const ipLon = fromIp("x-vercel-ip-longitude");
+  const here =
+    browser ??
+    (ipLat !== null && ipLon !== null ? { lat: ipLat, lon: ipLon } : null);
+  if (!here)
+    return Response.json(
+      { error: "Where you are isn't known." },
+      { status: 422 },
+    );
   try {
-    const places = await findPlaces(body.data.lat, body.data.lon);
+    const found = await findPlaces(here.lat, here.lon);
+    // From an approximate spot, every walk is an estimate.
+    const places = browser
+      ? found
+      : found.map((p) => ({
+          ...p,
+          walk: p.walk ? { ...p.walk, estimate: true } : p.walk,
+        }));
     const { error } = await supabase
       .from("settings")
       .upsert({ places: JSON.parse(JSON.stringify(places)) });

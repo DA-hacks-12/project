@@ -467,16 +467,21 @@ export function useWalks(): (dates?: string[]) => Promise<WalkUndo | null> {
       );
     })
       .then((here) => {
-        const from = placesOf(planner.settings)[0]?.from;
+        const saved = placesOf(planner.settings);
+        const from = saved[0]?.from;
         if (here && !find.isPending && (!from || km(from, here) >= MOVED_KM))
           return find.mutateAsync({ ...here, at });
+        // No position from the browser and no places yet: the server finds
+        // them near where the connection comes from (approximate).
+        if (!here && !saved.length && !find.isPending)
+          return find.mutateAsync({ at });
         return plan.mutateAsync({ dates, at });
       })
       .catch(() => null);
 }
 
 export const useFindPlaces = () =>
-  useServerCall<{ lat: number; lon: number; at?: string }, WalkUndo>(
+  useServerCall<{ lat?: number; lon?: number; at?: string }, WalkUndo>(
     "/api/places",
     natureKey,
   );
