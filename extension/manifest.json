@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Planner",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "icons": {
     "16": "icons/16.png",
     "32": "icons/32.png",

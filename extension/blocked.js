@@ -41,8 +41,8 @@ async function main() {
     if (verdict !== "distraction") return goOn();
   }
   leaving = true;
+  // This tab turns into the app's focus page for the session.
   const answer = await send({ type: "to-focus" });
-  if (answer?.back) return history.back();
   if (!answer?.sent) {
     leaving = false;
     goOn();

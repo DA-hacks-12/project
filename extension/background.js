@@ -12,14 +12,21 @@ const BLOCK_RULE = 1;
 const DEFAULT_APP = "https://dahacksproj.vercel.app";
 const BLOCKED = chrome.runtime.getURL("blocked.html");
 const VERDICTS = ["study", "distraction", "unsure"];
-const FROM_APP = new Set(["ping", "activity", "focus", "unfocus", "sync"]);
+const FROM_APP = new Set([
+  "ping",
+  "activity",
+  "focus",
+  "unfocus",
+  "focus-state",
+  "sync",
+]);
 const POLL_MINUTES = 1;
 
 // chrome.storage.local:
 //   appOrigin  where the app was last seen
 //   demoAt     the app's pinned demo clock ("14:10"), or null
 //   verdicts   {host: verdict}, kept for good
-//   focus      {until, id, tab, title, course}: focus mode running, from the app
+//   focus      {until, id, title, course}: focus mode running, from the app
 //   remote     {on, session}: the setting and the session under way, from
 //              the app's /api/lockdown; null when the app couldn't be reached
 //   lockdown   {until, title, course}: what's blocking now (derived), or null
@@ -176,60 +183,26 @@ async function sweep() {
     const host = hostOf(tab.url);
     if (!host || local(host) || new URL(tab.url).origin === app) continue;
     void judge(host).then(async (verdict) => {
-      if (verdict === "distraction") await toFocus(tab.id, { swept: true });
+      if (verdict === "distraction") await toFocus(tab.id);
     });
   }
 }
 
-// When a tab got to bounce last, so a tab going back onto another
-// distraction closes instead of going back again.
-const bounced = new Map();
-
 /**
- * Where a blocked visit goes: the app's own focus page for the session. If a
- * focus page is already open, it comes forward and the tab goes back to where
- * it was (or closes: a tab that was new, swept, or just bounced).
+ * Where a blocked visit goes: that same tab turns into the app's own focus
+ * page for the session (the owner's call: not a jump to another tab that
+ * happens to be open). Its focus page picks up a running focus where it is.
  */
-async function toFocus(tabId, { swept = false } = {}) {
+async function toFocus(tabId) {
   const lockdown = await currentLockdown();
   if (!lockdown) return { sent: false };
   const app = await appOrigin();
   const at = await stored("demoAt", null);
   const query = at ? `?at=${encodeURIComponent(at)}` : "";
   const page = lockdown.id ? `focus/${lockdown.id}` : "day";
-  const [open] = await chrome.tabs.query({ url: `${app}/focus/*` });
-  if (!open || open.id === tabId) {
-    await chrome.tabs.update(tabId, { url: `${app}/${page}${query}` });
-    return { sent: true };
-  }
-  await chrome.tabs.update(open.id, { active: true });
-  await chrome.windows.update(open.windowId, { focused: true });
-  const recent = Date.now() - (bounced.get(tabId) ?? 0) < 3000;
-  bounced.set(tabId, Date.now());
-  // Going back is done by the blocked page itself (chrome.tabs.goBack can't
-  // find the entry from there); the tab closes when it has nowhere to go.
-  const { seen = {} } = await chrome.storage.session.get("seen");
-  if (!swept && !recent && seen[tabId]) return { sent: true, back: true };
-  await chrome.tabs.remove(tabId).catch(() => {});
+  await chrome.tabs.update(tabId, { url: `${app}/${page}${query}` });
   return { sent: true };
 }
-
-// Tabs that have shown a real page, so a blocked visit has somewhere to go back to.
-chrome.webNavigation.onCommitted.addListener(
-  async ({ tabId, frameId, url }) => {
-    if (frameId !== 0 || !hostOf(url)) return;
-    const { seen = {} } = await chrome.storage.session.get("seen");
-    if (!seen[tabId])
-      await chrome.storage.session.set({ seen: { ...seen, [tabId]: true } });
-  },
-);
-chrome.tabs.onRemoved.addListener(async (tabId) => {
-  const { seen = {} } = await chrome.storage.session.get("seen");
-  if (seen[tabId]) {
-    delete seen[tabId];
-    await chrome.storage.session.set({ seen });
-  }
-});
 
 /** "14:10" when the app is on a pinned demo clock; null otherwise. */
 const demoClock = (at) =>
@@ -279,13 +252,9 @@ function serial(step) {
   return run;
 }
 
-// Closing the focus page ends focus mode, as Leave would.
-chrome.tabs.onRemoved.addListener(async (tabId) => {
-  const focus = await stored("focus", null);
-  if (focus?.tab !== tabId) return;
-  await chrome.storage.local.set({ focus: null });
-  void serial(poll);
-});
+// Closing the focus page doesn't end focus mode: only Pause, Done or Leave
+// in the app does, or its time running out. So Lockdown can't be shut by
+// closing a tab.
 
 /** What the popup shows: the setting, and what's blocking now. */
 async function lockdownState() {
@@ -427,8 +396,7 @@ function handle(message, sender, fromPage) {
       if (!(seconds > 0)) return null;
       const focus = {
         until: new Date(Date.now() + seconds * 1000).toISOString(),
-        id: text(message.id),
-        tab: sender.tab?.id ?? null,
+        id: text(message.block),
         title: text(message.title) ?? "Focus",
         course: text(message.course),
       };
@@ -437,6 +405,15 @@ function handle(message, sender, fromPage) {
         .then(() => serial(poll))
         .then(() => ({ ok: true }));
     }
+    // A focus page opening asks whether focus is already running (started
+    // in a tab since closed, or this tab was a distraction sent here), so it
+    // can pick the clock up where it is.
+    case "focus-state":
+      return stored("focus", null).then((focus) =>
+        focus && Date.parse(focus.until) > Date.now()
+          ? { id: focus.id, until: focus.until }
+          : null,
+      );
     // Focus mode paused, done or left.
     case "unfocus":
       return chrome.storage.local

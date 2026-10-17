@@ -21,12 +21,16 @@ type Request =
   // always tells it.
   | ({
       type: "focus";
-      id?: string; // the session's block, for its focus page
+      // The session's block, for its focus page. Not `id`: that's this
+      // channel's own reply id, and the two overwrote each other.
+      block?: string;
       title: string;
       course: string | null;
     } & ({ seconds: number } | { until: string }))
   // Focus mode paused, done or left.
   | { type: "unfocus" }
+  // A focus page opening: is focus already running, and until when?
+  | { type: "focus-state" }
   // The Lockdown setting changed: the extension asks the app again at once.
   | { type: "sync" };
 

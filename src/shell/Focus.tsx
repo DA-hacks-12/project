@@ -95,18 +95,39 @@ export function Focus({ id }: { id: string }) {
       .reduce((sum, s) => sum + s.minutes * 60, left);
     void askExtension({
       type: "focus",
-      id: block?.id,
+      block: block?.id,
       seconds: rest,
       title: task?.title ?? "Focus",
       course: task?.course ?? null,
     });
   };
-  // A fresh page isn't running yet (a reload resets the clock), and leaving
-  // ends it.
+  // Focus already running for this session (started in a tab since closed,
+  // or this tab was a distraction Lockdown sent here) is picked up where it
+  // is: the pomodoro and the seconds left, counted back from when it ends.
+  // Closing the tab or opening another doesn't end it; Pause, Done and Leave
+  // do, or its time running out.
   useEffect(() => {
-    void askExtension({ type: "unfocus" });
-    return () => void askExtension({ type: "unfocus" });
-  }, []);
+    void askExtension<{ id: string | null; until: string }>({
+      type: "focus-state",
+    }).then((state) => {
+      if (!state || state.id !== block?.id) return;
+      const total = segments.reduce((sum, s) => sum + s.minutes * 60, 0);
+      const remaining = Math.min(
+        total,
+        Math.round((Date.parse(state.until) - Date.now()) / 1000),
+      );
+      if (remaining <= 0) return;
+      let elapsed = total - remaining;
+      let at = 0;
+      while (at < segments.length - 1 && elapsed >= segments[at].minutes * 60) {
+        elapsed -= segments[at].minutes * 60;
+        at++;
+      }
+      setIndex(at);
+      setLeft(segments[at].minutes * 60 - elapsed);
+      setRunning(true);
+    });
+  }, [block?.id, segments]);
 
   const toggle = () => {
     if (finished) return;
