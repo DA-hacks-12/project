@@ -403,6 +403,25 @@ export const useDeleteLimit = () =>
 /** How far the student can move before nearby places are found again. */
 const MOVED_KM = 3;
 
+/**
+ * Asks the browser where the student is while their click is still in hand
+ * (Add or Upload a school, Upload classes, Reschedule): Chrome only shows the
+ * permission prompt for a click. Asked later, from a plan finishing, it gets
+ * a quiet prompt or none, and the request never answers, so no places are
+ * ever found. Once allowed, the later asks (`useWalks`) get it at once.
+ */
+export function askLocation() {
+  if (typeof navigator !== "undefined" && "geolocation" in navigator)
+    navigator.geolocation.getCurrentPosition(
+      () => {},
+      () => {},
+      { maximumAge: 10 * 60_000, timeout: 15_000 },
+    );
+}
+
+/** How long walks wait for the browser to say where the student is. */
+const LOCATION_WAIT_MS = 20_000;
+
 /** Walks being found or planned again: the header shows it ("Finding walks"). */
 export const natureKey = ["nature"];
 
@@ -434,6 +453,9 @@ export function useWalks(): (dates?: string[]) => Promise<WalkUndo | null> {
   return (dates) =>
     new Promise<{ lat: number; lon: number } | null>((resolve) => {
       if (!("geolocation" in navigator)) return resolve(null);
+      // An unanswered prompt doesn't count against the browser's own
+      // timeout: give up here, and use the places saved, if any.
+      setTimeout(() => resolve(null), LOCATION_WAIT_MS);
       navigator.geolocation.getCurrentPosition(
         (position) =>
           resolve({

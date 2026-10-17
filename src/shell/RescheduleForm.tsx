@@ -10,6 +10,7 @@ import {
 import { useState } from "react";
 import type { Temporal } from "temporal-polyfill";
 import {
+  askLocation,
   type Scope,
   useNow,
   useReschedule,
@@ -50,6 +51,8 @@ export function RescheduleForm({
     <form
       onSubmit={(event) => {
         event.preventDefault();
+        // At the click, so the browser shows its prompt (the walks need it).
+        askLocation();
         onStart?.();
         // Not `mutate`'s own callback: it is dropped once this card closes,
         // and the answer (with its Undo), or the failure, must still arrive.

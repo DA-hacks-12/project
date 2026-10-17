@@ -7,6 +7,7 @@ import { clockRange } from "@/lib/time";
 import { daysText } from "@/modules/classes/core/classes";
 import { timeZoneOf } from "@/modules/planner/core/items";
 import {
+  askLocation,
   useDeleteClass,
   useNow,
   usePlannerData,
@@ -53,6 +54,8 @@ export function Classes() {
 
   const upload = async (chosen: File) => {
     setError(null);
+    // At the click, so the browser shows its prompt (the walks need it).
+    askLocation();
     if (!KINDS.includes(chosen.type))
       return setError("Upload a screenshot (PNG or JPEG) or a PDF.");
     if (chosen.size > 3 * 1024 * 1024)

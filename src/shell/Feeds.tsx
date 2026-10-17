@@ -4,6 +4,7 @@ import { Button, Flex, Text, TextField } from "@radix-ui/themes";
 import { useRef, useState } from "react";
 import { isReading } from "@/modules/planner/core/items";
 import {
+  askLocation,
   type ImportSource,
   useDeleteFeed,
   useImportFeed,
@@ -25,11 +26,14 @@ export function Feeds() {
   const running = importFeed.isPending ? importFeed.variables.source : null;
 
   // The walks follow once the import's plan is made (see App).
-  const run = (source: ImportSource) =>
+  const run = (source: ImportSource) => {
+    // At the click, so the browser shows its prompt (the walks need it).
+    askLocation();
     importFeed.mutate({
       source,
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     });
+  };
 
   return (
     <Flex direction="column" gap="3">
