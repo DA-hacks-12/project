@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Map Location Preview</title>
+	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+	<style>
+		:root {
+			color-scheme: light;
+			font-family: "Trebuchet MS", sans-serif;
+			color: #20332d;
+			background: #f3f6f0;
+		}
+
+		* { box-sizing: border-box; }
+
+		body {
+			min-height: 100vh;
+			margin: 0;
+			padding: 56px 24px;
+			background-image: linear-gradient(135deg, #f3f6f0 0%, #e6eee5 100%);
+		}
+
+		main {
+			width: min(100%, 680px);
+			margin: 0 auto;
+		}
+
+		h1 {
+			margin: 0 0 8px;
+			font-family: Georgia, serif;
+			font-size: 32px;
+			font-weight: 500;
+		}
+
+		.search-controls {
+			display: flex;
+			gap: 12px;
+			align-items: center;
+			margin: 20px 0 12px;
+			flex-wrap: wrap;
+		}
+
+		.search-controls label {
+			font-size: 15px;
+			font-weight: 600;
+		}
+
+		.search-controls input {
+			width: 80px;
+			padding: 8px 12px;
+			border: 1px solid #bac9bd;
+			border-radius: 4px;
+			font-size: 15px;
+			background: #fff;
+			color: #20332d;
+		}
+
+		.search-controls button {
+			padding: 9px 18px;
+			border: none;
+			border-radius: 4px;
+			background: #17664e;
+			color: #fff;
+			font-size: 15px;
+			font-weight: 600;
+			cursor: pointer;
+			transition: background 120ms ease;
+		}
+
+		.search-controls button:hover {
+			background: #124e3c;
+		}
+
+		.search-controls button:disabled {
+			background: #94b5aa;
+			cursor: not-allowed;
+		}
+
+		#search-status {
+			margin: 0 0 16px;
+			font-size: 14px;
+			color: #4a665d;
+			min-height: 20px;
+		}
+
+		.location-list {
+			margin: 16px 0 0;
+			padding: 0;
+			list-style: none;
+			border-top: 1px solid #cbd8cc;
+		}
+
+		.location-list li { border-bottom: 1px solid #cbd8cc; }
+
+		.map-location {
+			display: block;
+			padding: 18px 4px;
+			color: #17664e;
+			font-size: 18px;
+			text-decoration: none;
+		}
+
+		.map-location:hover, .map-location:focus-visible { color: #a34d28; text-decoration: underline; text-underline-offset: 4px; }
+
+		#map-preview {
+			position: fixed;
+			z-index: 10;
+			width: min(360px, calc(100vw - 24px));
+			overflow: hidden;
+			border: 1px solid #bac9bd;
+			border-radius: 6px;
+			background: #fff;
+			box-shadow: 0 12px 32px rgb(27 48 38 / 22%);
+			pointer-events: none;
+			opacity: 0;
+			transform: translateY(5px);
+			transition: opacity 120ms ease, transform 120ms ease;
+		}
+
+		#map-preview.is-visible {
+			opacity: 1;
+			transform: translateY(0);
+		}
+
+		#preview-map { height: 220px; width: 100%; }
+
+		#preview-label {
+			margin: 0;
+			padding: 9px 12px;
+			color: #20332d;
+			font-size: 14px;
+			font-weight: 600;
+		}
+
+		@media (prefers-reduced-motion: reduce) {
+			#map-preview { transition: none; }
+		}
+	</style>
+</head>
+<body>
+	<main>
+		<h1>Nearby Parks, Trails &amp; POIs</h1>
+		<div class="search-controls">
+			<label for="radius-miles">Radius (mi):</label>
+			<input type="number" id="radius-miles" value="5" min="1" max="50">
+			<button id="find-location" type="button">Find nearby places</button>
+		</div>
+		<p id="search-status"></p>
+		<ul class="location-list" id="suggestions">
+			<!-- Dynamically populated -->
+		</ul>
+	</main>
+
+	<aside id="map-preview" aria-hidden="true">
+		<div id="preview-map"></div>
+		<p id="preview-label"></p>
+	</aside>
+
+	<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+	<script src="MapTest.js"></script>
+</body>
+</html>
