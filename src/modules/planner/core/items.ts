@@ -1,11 +1,10 @@
-import { Temporal } from "temporal-polyfill";
+import type { Temporal } from "temporal-polyfill";
 import { addMinutes, type Zoned, zoned } from "@/lib/time";
-import { hoursOf } from "@/modules/arrange/core/hours";
-import { freeTime, type Idea } from "@/modules/suggest/core/free-time";
-import { type BlockRow, type Planner, placesOf, type TaskRow } from "./queries";
+import { type NatureStop, natureStopOf } from "@/modules/suggest/core/places";
+import type { BlockRow, Planner, TaskRow } from "./queries";
 
-// What a day shows: its blocks (sessions, breaks, the student's events), free
-// time ideas, and the assignments due that day. Plain code, the same every time.
+// What a day shows: its blocks (sessions, breaks, the student's events, nature
+// suggestions) and the assignments due that day. Plain code, the same every time.
 
 interface Timed {
   key: string;
@@ -17,7 +16,7 @@ export type Item =
   | (Timed & { kind: "session"; block: BlockRow; task: TaskRow | undefined })
   | (Timed & { kind: "break"; block: BlockRow })
   | (Timed & { kind: "event"; block: BlockRow })
-  | (Timed & { kind: "idea"; idea: Idea });
+  | (Timed & { kind: "nature"; block: BlockRow; place: NatureStop });
 
 export interface DayView {
   items: Item[];
@@ -54,30 +53,12 @@ export function dayView(
         task: tasks.get(block.task_id ?? ""),
       });
     else if (block.kind === "break") items.push({ ...base, kind: "break" });
-    else items.push({ ...base, kind: "event" });
+    else if (block.kind === "nature") {
+      const place = natureStopOf(block.place);
+      if (place) items.push({ ...base, kind: "nature", place });
+    } else items.push({ ...base, kind: "event" });
   }
 
-  const today = now.toPlainDate();
-  const { hours } = hoursOf(planner.settings?.active_hours);
-  if (Temporal.PlainDate.compare(date, today) >= 0) {
-    const from = date.equals(today)
-      ? now
-      : date.toZonedDateTime({ timeZone: tz });
-    for (const idea of freeTime(
-      items,
-      hours,
-      from,
-      placesOf(planner.settings),
-    )) {
-      items.push({
-        kind: "idea",
-        key: `idea-${idea.start.epochMilliseconds}`,
-        start: idea.start,
-        end: addMinutes(idea.start, idea.minutes),
-        idea,
-      });
-    }
-  }
   items.sort((a, b) => a.start.epochMilliseconds - b.start.epochMilliseconds);
 
   const due = planner.tasks.filter((t) =>
@@ -90,7 +71,7 @@ export function current(items: Item[], now: Zoned): Item | undefined {
   const at = now.epochMilliseconds;
   return items.find(
     (i) =>
-      i.kind !== "idea" &&
+      i.kind !== "nature" &&
       i.start.epochMilliseconds <= at &&
       at < i.end.epochMilliseconds,
   );
@@ -104,8 +85,8 @@ export function titleOf(item: Item): string {
       return item.block.rest ? REST_TITLE[item.block.rest] : "Break";
     case "event":
       return item.block.title ?? "Event";
-    case "idea":
-      return item.idea.words;
+    case "nature":
+      return item.place.name;
   }
 }
 
@@ -131,18 +112,6 @@ export function biggestPriority(
         (b.minutes ?? 0) - (a.minutes ?? 0),
     )
     .slice(0, count);
-}
-
-/** The session to focus on now: the one under way, else the next one today. */
-export function focusTarget(
-  planner: Planner,
-  now: Zoned,
-): BlockRow | undefined {
-  const { items } = dayView(planner, now.toPlainDate(), now);
-  const sessions = items.filter((i) => i.kind === "session" && !i.block.done);
-  const at = now.epochMilliseconds;
-  const next = sessions.find((i) => i.end.epochMilliseconds > at);
-  return next && "block" in next ? next.block : undefined;
 }
 
 /** How long after an import the page keeps watching for readings to land. */

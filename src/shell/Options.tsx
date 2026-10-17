@@ -1,29 +1,44 @@
 "use client";
 
-import { Button, Flex, Heading, Separator, Text } from "@radix-ui/themes";
+import {
+  Button,
+  Flex,
+  Heading,
+  SegmentedControl,
+  Separator,
+  Switch,
+  Text,
+} from "@radix-ui/themes";
 import { useState } from "react";
 import {
-  DEFAULT_END,
-  DEFAULT_START,
-  hoursOf,
-} from "@/modules/arrange/core/hours";
+  bodyClockOf,
+  type Clock,
+  describe,
+} from "@/modules/arrange/core/body-clock";
 import {
-  activeHoursFromExtension,
+  PREFERENCES,
+  type PreferenceKey,
+  preferencesOf,
+} from "@/modules/arrange/core/preferences";
+import {
+  activityFromExtension,
+  syncLockdown,
   useExtension,
 } from "@/modules/extension/ui/bridge";
-import { placesOf } from "@/modules/planner/core/queries";
 import {
   signOut,
-  useFindPlaces,
   usePlannerData,
-  useSaveActiveHours,
+  useSaveActivity,
+  useSaveClock,
+  useSaveFocusSettings,
+  useSavePreferences,
 } from "@/modules/planner/ui/planner";
 import { Feeds } from "./Feeds";
 import styles from "./options.module.css";
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
-/** Options, as its own page: schools, active hours, places and the account. */
+/** Options, as its own page: schools, the body clock, preferences, focus and the account. */
 export function Options() {
   return (
     <Flex direction="column" gap="5" className={styles.page}>
@@ -34,12 +49,16 @@ export function Options() {
         <Feeds />
       </Section>
       <Separator size="4" />
-      <Section title="Hours">
-        <ActiveHours />
+      <Section title="Body clock">
+        <BodyClock />
       </Section>
       <Separator size="4" />
-      <Section title="Places">
-        <Places />
+      <Section title="Preferences">
+        <Preferences />
+      </Section>
+      <Separator size="4" />
+      <Section title="Focus">
+        <FocusSettings />
       </Section>
       <Separator size="4" />
       <Section title="Account">
@@ -64,105 +83,228 @@ function Section({
   );
 }
 
+const CLOCKS = [
+  { value: "morning", label: "Morning" },
+  { value: "any", label: "Any" },
+  { value: "night", label: "Night" },
+] as const;
+
+const SOURCE = {
+  learned: (nights: number) => `From your browser, ${nights} nights`,
+  set: () => "Set by you",
+  default: () => "Default",
+};
+
 /**
- * The optional extension learns active hours from the browser. Without it,
- * plans use default hours (8am to 11pm, none preferred), shown the same way.
+ * The body clock: when the student sleeps, their chronotype and their
+ * alertness through the day. Learned by the optional extension, or set here
+ * as a morning or night person, which wins; otherwise a default.
  */
-function ActiveHours() {
+function BodyClock() {
   const planner = usePlannerData();
-  const save = useSaveActiveHours();
+  const saveActivity = useSaveActivity();
+  const saveClock = useSaveClock();
   const extension = useExtension();
   const [checking, setChecking] = useState(false);
-  const { hours, learned } = hoursOf(planner.settings?.active_hours);
+  const clock = bodyClockOf(planner.settings ?? {});
+  const [first, end] = clock.sharpest;
+  const sharp = (hour: number) =>
+    first < end ? hour >= first && hour < end : hour >= first || hour < end;
 
   return (
-    <Flex direction="column" gap="2">
-      <div className={styles.bars} role="img" aria-label="Active hours">
+    <Flex direction="column" gap="3">
+      <Text size="2">{describe(clock)}</Text>
+      <div className={styles.bars} role="img" aria-label="Alertness by hour">
         {HOURS.map((hour) => (
           <span
             key={hour}
-            className={`${styles.bar} ${learned ? "" : styles.quiet}`}
-            style={{ height: `${Math.max(2, hours[hour])}%` }}
+            className={`${styles.bar} ${sharp(hour) ? styles.sharp : ""}`}
+            style={{ height: `${clock.hours[hour]}%` }}
           />
         ))}
       </div>
-      <Flex gap="3" align="center" justify="between">
+      <div className={styles.ticks} aria-hidden>
+        {[0, 6, 12, 18].map((hour) => (
+          <span key={hour} style={{ gridColumn: hour + 1 }}>
+            {hour % 12 || 12}
+            {hour < 12 ? "am" : "pm"}
+          </span>
+        ))}
+      </div>
+      <Flex align="center" justify="between" gap="4">
         <Text size="2" color="gray">
-          {learned
-            ? "Learned from your browser"
-            : `Default, ${DEFAULT_START}am to ${DEFAULT_END - 12}pm`}
+          {SOURCE[clock.source](clock.nights)}
         </Text>
-        <Text size="2" color="gray">
-          {extension === null
-            ? ""
-            : extension
-              ? "Extension connected"
-              : "Extension not connected"}
-        </Text>
+        <SegmentedControl.Root
+          aria-label="Body clock"
+          value={planner.settings?.clock ?? "any"}
+          onValueChange={(value) =>
+            saveClock.mutate({
+              clock: value === "any" ? null : (value as Clock),
+            })
+          }
+          className={styles.pair}
+        >
+          {CLOCKS.map((c) => (
+            <SegmentedControl.Item key={c.value} value={c.value}>
+              {c.label}
+            </SegmentedControl.Item>
+          ))}
+        </SegmentedControl.Root>
       </Flex>
-      {extension && (
-        <Flex>
-          <Button
-            variant="soft"
-            loading={checking}
-            onClick={async () => {
-              setChecking(true);
-              const found = await activeHoursFromExtension();
-              setChecking(false);
-              if (found) save.mutate({ hours: found });
-            }}
-          >
-            Refresh
-          </Button>
+      {extension !== null && (
+        <Flex align="center" justify="between" gap="4">
+          <Text size="2" color="gray">
+            {extension ? "Extension connected" : "Extension not connected"}
+          </Text>
+          {extension && (
+            <Button
+              variant="soft"
+              loading={checking}
+              onClick={async () => {
+                setChecking(true);
+                const found = await activityFromExtension();
+                setChecking(false);
+                if (found) saveActivity.mutate(found);
+              }}
+            >
+              Refresh
+            </Button>
+          )}
         </Flex>
       )}
     </Flex>
   );
 }
 
-function Places() {
+/** Each preference is a pair of opposites with "Any" between them. */
+function Preferences() {
   const planner = usePlannerData();
-  const find = useFindPlaces();
-  const [denied, setDenied] = useState(false);
-  const places = placesOf(planner.settings).slice(0, 3);
+  const save = useSavePreferences();
+  const chosen: Record<string, string> = preferencesOf(
+    planner.settings?.preferences,
+  );
 
   return (
-    <Flex direction="column" gap="2">
-      {places.map((p) => (
-        <Text key={p.name} size="2">
-          {p.name} <Text color="gray">· {p.km} km</Text>
+    <div className={styles.preferences}>
+      {Object.entries(PREFERENCES).map(([key, entry]) => {
+        const [first, second] = Object.entries(entry.choices);
+        const choose = (value: string) => {
+          const { [key]: _, ...rest } = chosen;
+          save.mutate({
+            preferences: value === "any" ? rest : { ...rest, [key]: value },
+          });
+        };
+        return (
+          <Flex key={key} align="center" justify="between" gap="4">
+            <Text size="2" id={`preference-${key}`}>
+              {entry.label}
+            </Text>
+            <SegmentedControl.Root
+              aria-labelledby={`preference-${key}`}
+              value={chosen[key as PreferenceKey] ?? "any"}
+              onValueChange={choose}
+              className={styles.pair}
+            >
+              <SegmentedControl.Item value={first[0]}>
+                {first[1].label}
+              </SegmentedControl.Item>
+              <SegmentedControl.Item value="any">Any</SegmentedControl.Item>
+              <SegmentedControl.Item value={second[0]}>
+                {second[1].label}
+              </SegmentedControl.Item>
+            </SegmentedControl.Root>
+          </Flex>
+        );
+      })}
+    </div>
+  );
+}
+
+const FOCUS_LENGTHS = [25, 50, 90];
+const BREAK_LENGTHS = [5, 10, 15];
+
+/**
+ * Lockdown (only here): with it on and the extension installed, distracting
+ * sites are blocked whenever a session is under way or focus mode is running.
+ * And the pomodoro: how long each focus and each break lasts.
+ */
+function FocusSettings() {
+  const planner = usePlannerData();
+  const save = useSaveFocusSettings();
+  const extension = useExtension();
+  const settings = planner.settings;
+
+  return (
+    <div className={styles.preferences}>
+      <Flex align="center" justify="between" gap="4">
+        <Text as="label" size="2" htmlFor="lockdown">
+          Lockdown
         </Text>
-      ))}
-      <Flex gap="3" align="center">
-        <Button
-          variant="soft"
-          loading={find.isPending}
-          onClick={() =>
-            navigator.geolocation.getCurrentPosition(
-              (position) => {
-                setDenied(false);
-                find.mutate({
-                  lat: position.coords.latitude,
-                  lon: position.coords.longitude,
-                });
-              },
-              () => setDenied(true),
-            )
-          }
-        >
-          {places.length ? "Find again" : "Find near me"}
-        </Button>
-        {denied && (
-          <Text size="2" color="gray">
-            Location is off.
-          </Text>
-        )}
-        {find.isError && (
-          <Text size="2" color="red">
-            {find.error.message}
-          </Text>
-        )}
+        <Flex align="center" gap="3">
+          {extension === false && (
+            <Text size="2" color="gray">
+              Needs the extension
+            </Text>
+          )}
+          <Switch
+            id="lockdown"
+            checked={settings?.lockdown ?? false}
+            onCheckedChange={(lockdown) => {
+              // Ask the extension once the setting is saved, not before.
+              save.mutate(
+                { lockdown },
+                { onSettled: () => void syncLockdown() },
+              );
+            }}
+          />
+        </Flex>
       </Flex>
+      <Length
+        label="Work"
+        value={settings?.focus_minutes ?? 25}
+        options={FOCUS_LENGTHS}
+        onChange={(focus_minutes) => save.mutate({ focus_minutes })}
+      />
+      <Length
+        label="Break"
+        value={settings?.break_minutes ?? 5}
+        options={BREAK_LENGTHS}
+        onChange={(break_minutes) => save.mutate({ break_minutes })}
+      />
+    </div>
+  );
+}
+
+function Length({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  options: number[];
+  onChange: (minutes: number) => void;
+}) {
+  const id = `length-${label.toLowerCase()}`;
+  return (
+    <Flex align="center" justify="between" gap="4">
+      <Text size="2" id={id}>
+        {label}
+      </Text>
+      <SegmentedControl.Root
+        aria-labelledby={id}
+        value={String(value)}
+        onValueChange={(v) => onChange(Number(v))}
+        className={styles.pair}
+      >
+        {options.map((minutes) => (
+          <SegmentedControl.Item key={minutes} value={String(minutes)}>
+            {minutes} min
+          </SegmentedControl.Item>
+        ))}
+      </SegmentedControl.Root>
     </Flex>
   );
 }

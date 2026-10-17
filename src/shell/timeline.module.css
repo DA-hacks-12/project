@@ -1,13 +1,19 @@
 .scroll {
+  flex: 1;
+  min-height: calc(var(--band) + 80px);
   overflow-x: auto;
   overflow-y: hidden;
-  border-top: 1px solid var(--hairline);
-  border-bottom: 1px solid var(--hairline);
+  scrollbar-width: none;
+
+  /* The band's height: tall on a tall screen, shared when blocks overlap. */
+  --band: clamp(150px, 32vh, 300px);
+  --label: 28px;
+  --gap: 8px;
 }
 
 .track {
   position: relative;
-  min-height: 140px;
+  height: 100%;
 }
 
 .tick {
@@ -15,16 +21,6 @@
   top: 0;
   bottom: 0;
   border-left: 1px solid var(--gray-a3);
-}
-
-.tick span {
-  position: absolute;
-  top: 8px;
-  left: 6px;
-  color: var(--gray-10);
-  font-size: var(--font-size-1);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 .now {
@@ -36,7 +32,38 @@
   z-index: 1;
 }
 
-.slot {
+/* Hour labels, then the lanes of blocks, a little above the middle (where
+   the eye puts the center). */
+.band {
   position: absolute;
-  height: 68px;
+  top: 45%;
+  left: 0;
+  right: 0;
+  height: calc(var(--label) + var(--band));
+  transform: translateY(-50%);
+}
+
+.hour {
+  position: absolute;
+  top: 0;
+  padding-left: 6px;
+  color: var(--gray-10);
+  font-size: var(--font-size-1);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.slot {
+  --lane-height: calc(
+    (var(--band) - (var(--lanes) - 1) * var(--gap)) /
+    var(--lanes)
+  );
+  position: absolute;
+  top: calc(var(--label) + var(--lane) * (var(--lane-height) + var(--gap)));
+  height: var(--lane-height);
+}
+
+/* What's over steps back. */
+.past {
+  opacity: 0.5;
 }

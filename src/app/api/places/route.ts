@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { atClock, zoned } from "@/lib/time";
+import { bodyClockOf } from "@/modules/arrange/core/body-clock";
+import { weekFrom } from "@/modules/arrange/core/plan";
+import { refreshNature } from "@/modules/suggest/core/nature-run";
 import { findPlaces } from "@/modules/suggest/core/places";
 
 // OpenStreetMap can take most of a minute when busy.
@@ -8,6 +12,11 @@ export const maxDuration = 120;
 const Body = z.object({
   lat: z.number().min(-90).max(90),
   lon: z.number().min(-180).max(180),
+  // `at` pins the clock for demos, in the student's time zone.
+  at: z
+    .string()
+    .regex(/^\d{1,2}:\d{2}$/)
+    .optional(),
 });
 
 export async function POST(request: Request) {
@@ -24,6 +33,20 @@ export async function POST(request: Request) {
       .from("settings")
       .upsert({ places: JSON.parse(JSON.stringify(places)) });
     if (error) throw error;
+    // With places known, the rest of the week gets its nature suggestions.
+    const { data: settings } = await supabase
+      .from("settings")
+      .select("time_zone, nights, clock")
+      .maybeSingle();
+    let now = zoned(new Date(), settings?.time_zone ?? "UTC");
+    if (body.data.at) now = atClock(now, body.data.at) ?? now;
+    const days = weekFrom(now);
+    await refreshNature(supabase, {
+      now,
+      hours: bodyClockOf(settings ?? {}).hours,
+      days,
+      which: days.map((_, d) => d),
+    }).catch((e) => console.error("nature", e));
     return Response.json({ places });
   } catch (error) {
     console.error("places", error);

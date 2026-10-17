@@ -1,50 +1,43 @@
 "use client";
 
 import { SpeakerLoudIcon, SpeakerOffIcon } from "@radix-ui/react-icons";
-import {
-  Button,
-  Flex,
-  Heading,
-  IconButton,
-  Switch,
-  Text,
-} from "@radix-ui/themes";
+import { Button, Flex, Heading, IconButton, Text } from "@radix-ui/themes";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
-import { iso } from "@/lib/time";
-import { askExtension, useExtension } from "@/modules/extension/ui/bridge";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import { askExtension } from "@/modules/extension/ui/bridge";
 import {
-  useNow,
+  useCourseColor,
   usePlannerData,
   useSetBlockDone,
 } from "@/modules/planner/ui/planner";
 import styles from "./focus.module.css";
-import { Reminders } from "./Reminders";
 
-// Focus mode: one session, full screen, in pomodoros (25 minutes on, 5 off).
-// With the optional extension, Lockdown blocks entertainment sites while it runs.
+// Focus mode: one session, full screen, in pomodoros of the student's lengths
+// (Options → Focus). Time fills the screen from the ground up: the field
+// behind the clock rises in the course's color while you work, and sinks
+// back in green while you rest. The extension hears when focus runs; whether that blocks anything
+// is its Lockdown setting's business.
 
-const ON = 25;
-const OFF = 5;
-const LOFI = "https://www.youtube-nocookie.com/embed/jfKfPfyJRdk?autoplay=1";
+// Lofi Girl's live stream, whichever is on now (a fixed video id goes stale).
+const LOFI =
+  "https://www.youtube.com/embed/live_stream?channel=UCSJ4gkVC6NrvII8umztf0Ow&autoplay=1";
 
 interface Segment {
-  kind: "Focus" | "Break";
+  kind: "focus" | "rest";
   minutes: number;
 }
 
-export function pomodoros(total: number): Segment[] {
+/** The session in pomodoros. A rest left over at the end is dropped. */
+export function pomodoros(total: number, on: number, off: number): Segment[] {
   const segments: Segment[] = [];
   let left = total;
   while (left > 0) {
-    const on = Math.min(ON, left);
-    segments.push({ kind: "Focus", minutes: on });
-    left -= on;
-    if (left > 0) {
-      const off = Math.min(OFF, left);
-      segments.push({ kind: "Break", minutes: off });
-      left -= off;
-    }
+    const work = Math.min(on, left);
+    segments.push({ kind: "focus", minutes: work });
+    left -= work;
+    if (left <= off) break;
+    segments.push({ kind: "rest", minutes: off });
+    left -= off;
   }
   return segments;
 }
@@ -55,19 +48,24 @@ export function Focus({ id }: { id: string }) {
   const params = useSearchParams();
   const keep = params.toString() ? `?${params.toString()}` : "";
   const setDone = useSetBlockDone();
-  const { now } = useNow();
+  const courseColor = useCourseColor();
   const block = planner.blocks.find((b) => b.id === id);
   const task = planner.tasks.find((t) => t.id === block?.task_id);
-  const segments = pomodoros(block?.minutes ?? ON);
-  const focusRounds = segments.filter((s) => s.kind === "Focus").length;
+  const on = planner.settings?.focus_minutes ?? 25;
+  const off = planner.settings?.break_minutes ?? 5;
+  const segments = useMemo(
+    () => pomodoros(block?.minutes ?? on, on, off),
+    [block?.minutes, on, off],
+  );
+  const rounds = segments.filter((s) => s.kind === "focus").length;
 
   const [index, setIndex] = useState(0);
   const [left, setLeft] = useState(segments[0].minutes * 60);
   const [running, setRunning] = useState(false);
   const [sound, setSound] = useState(false);
-  // Lockdown needs the optional extension; without it the switch isn't shown.
-  const extension = useExtension();
-  const [lockdown, setLockdown] = useState(true);
+  const segment = segments[index];
+  const length = segment.minutes * 60;
+  const finished = !running && index === segments.length - 1 && left === 0;
 
   useEffect(() => {
     if (!running) return;
@@ -82,29 +80,76 @@ export function Focus({ id }: { id: string }) {
       setLeft(segments[index + 1].minutes * 60);
     } else {
       setRunning(false);
+      void askExtension({ type: "unfocus" });
     }
   }, [left, running, index, segments]);
 
-  // Leaving focus mode always lifts the block.
-  useEffect(() => () => void askExtension({ type: "unfocus" }), []);
-
-  const lockUntilEnd = () => {
+  // The extension hears whenever focus runs, and when it stops.
+  const tell = (running: boolean) => {
+    if (!running) {
+      void askExtension({ type: "unfocus" });
+      return;
+    }
     const rest = segments
       .slice(index + 1)
       .reduce((sum, s) => sum + s.minutes * 60, left);
     void askExtension({
       type: "focus",
-      until: iso(now.add({ seconds: rest })),
+      id: block?.id,
+      seconds: rest,
+      title: task?.title ?? "Focus",
+      course: task?.course ?? null,
     });
   };
-  const start = () => {
-    setRunning(true);
-    if (extension && lockdown) lockUntilEnd();
+  // A fresh page isn't running yet (a reload resets the clock), and leaving
+  // ends it.
+  useEffect(() => {
+    void askExtension({ type: "unfocus" });
+    return () => void askExtension({ type: "unfocus" });
+  }, []);
+
+  const toggle = () => {
+    if (finished) return;
+    setRunning(!running);
+    tell(!running);
   };
   const leave = () => {
-    void askExtension({ type: "unfocus" });
+    tell(false);
     router.push(`/day${keep}`);
   };
+
+  // Space starts and pauses, as in any timer.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.code !== "Space" || event.target !== document.body) return;
+      event.preventDefault();
+      document.getElementById("focus-toggle")?.click();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const mm = String(Math.floor(left / 60)).padStart(2, "0");
+  const ss = String(left % 60).padStart(2, "0");
+  // The tab title shows the time left. Next writes the page's own title again
+  // once its streamed metadata lands, so the head is watched and ours restored.
+  const title = `${mm}:${ss} · ${task?.title ?? "Focus"}`;
+  useEffect(() => {
+    const set = () => {
+      if (document.title !== title) document.title = title;
+    };
+    set();
+    const watch = new MutationObserver(set);
+    watch.observe(document.head, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    return () => {
+      watch.disconnect();
+      document.title = "Planner";
+    };
+  }, [title]);
 
   if (!block) {
     return (
@@ -123,82 +168,106 @@ export function Focus({ id }: { id: string }) {
     );
   }
 
-  const segment = segments[index];
+  const elapsed = 1 - left / length;
   const round = segments
     .slice(0, index + 1)
-    .filter((s) => s.kind === "Focus").length;
-  const mm = String(Math.floor(left / 60)).padStart(2, "0");
-  const ss = String(left % 60).padStart(2, "0");
+    .filter((s) => s.kind === "focus").length;
+  const label = finished
+    ? "Finished"
+    : segment.kind === "focus"
+      ? `Focus ${round} of ${rounds}`
+      : "Rest";
 
   return (
-    <Flex
-      className={styles.screen}
-      direction="column"
-      align="center"
-      justify="center"
-      gap="5"
+    <div
+      className={`${styles.screen} ${running ? styles.running : ""}`}
+      style={{ "--course": courseColor(task?.course) } as CSSProperties}
     >
-      <Flex direction="column" align="center" gap="1">
-        <Text size="2" color="gray">
-          {task?.course}
-        </Text>
-        <Heading size="7" align="center">
-          {task?.title ?? "Focus"}
-        </Heading>
-      </Flex>
-      <div className={styles.clock}>
-        {mm}:{ss}
-      </div>
-      <Text size="3" color="gray">
-        {segment.kind === "Focus"
-          ? `Focus · ${round} of ${focusRounds}`
-          : "Break"}
-      </Text>
-      <Flex gap="3" align="center">
-        <Button size="3" onClick={running ? () => setRunning(false) : start}>
-          {running ? "Pause" : "Start"}
-        </Button>
-        <IconButton
-          size="3"
-          variant="soft"
-          aria-label={sound ? "Sound off" : "Sound on"}
-          onClick={() => setSound(!sound)}
-        >
-          {sound ? <SpeakerLoudIcon /> : <SpeakerOffIcon />}
-        </IconButton>
-        <Button
-          size="3"
-          variant="soft"
-          onClick={() => {
-            setDone.mutate({ id: block.id, done: true });
-            leave();
-          }}
-        >
-          Done
-        </Button>
-        <Button size="3" variant="soft" color="gray" onClick={leave}>
+      {/* Time, filling the screen. A new segment starts a new field. */}
+      <div
+        key={index}
+        aria-hidden
+        className={`${styles.field} ${segment.kind === "rest" ? styles.rest : ""}`}
+        style={{
+          transform: `scaleY(${segment.kind === "rest" ? 1 - elapsed : elapsed})`,
+        }}
+      />
+
+      <header className={styles.top}>
+        <div>
+          <Text as="p" size="2" color="gray">
+            {task?.course}
+          </Text>
+          <Heading size="6" className={styles.title}>
+            {task?.title ?? "Focus"}
+          </Heading>
+        </div>
+        <Button variant="ghost" color="gray" onClick={leave}>
           Leave
         </Button>
-      </Flex>
-      {extension && (
-        <Text as="label" size="2">
-          <Flex gap="2" align="center">
-            <Switch
-              checked={lockdown}
-              onCheckedChange={(on) => {
-                setLockdown(on);
-                if (!running) return;
-                if (on) lockUntilEnd();
-                else void askExtension({ type: "unfocus" });
-              }}
-            />
-            Lockdown
-          </Flex>
+      </header>
+
+      <div className={styles.center}>
+        <div className={styles.clock} role="timer" aria-live="off">
+          {mm}:{ss}
+        </div>
+        <Text size="3" color="gray">
+          {label}
         </Text>
-      )}
-      <div className={styles.notes}>
-        <Reminders compact />
+        <div className={styles.segments} aria-hidden>
+          {segments.map((s, i) => (
+            <span
+              // biome-ignore lint/suspicious/noArrayIndexKey: segments are fixed for the session
+              key={i}
+              className={s.kind === "rest" ? styles.restSegment : undefined}
+              style={{ flexGrow: s.minutes }}
+            >
+              <i
+                style={{
+                  transform: `scaleX(${i < index ? 1 : i === index ? elapsed : 0})`,
+                }}
+              />
+            </span>
+          ))}
+        </div>
+        <Flex gap="3" align="center">
+          <Button
+            id="focus-toggle"
+            size="3"
+            onClick={toggle}
+            disabled={finished}
+          >
+            {running
+              ? "Pause"
+              : left === length && index === 0
+                ? "Start"
+                : "Resume"}
+          </Button>
+          <Button
+            size="3"
+            variant="soft"
+            onClick={() => {
+              // The extension asks again once Done is saved: the session is
+              // no longer under way, so Lockdown lifts at once.
+              setDone
+                .mutateAsync({ id: block.id, done: true })
+                .finally(() => void askExtension({ type: "sync" }));
+              leave();
+            }}
+          >
+            Done
+          </Button>
+          <IconButton
+            size="3"
+            variant="soft"
+            aria-label={sound ? "Sound off" : "Sound on"}
+            onClick={() => setSound(!sound)}
+          >
+            {sound ? <SpeakerLoudIcon /> : <SpeakerOffIcon />}
+          </IconButton>
+        </Flex>
       </div>
+
       {sound && (
         <iframe
           className={styles.lofi}
@@ -208,6 +277,6 @@ export function Focus({ id }: { id: string }) {
           referrerPolicy="strict-origin-when-cross-origin"
         />
       )}
-    </Flex>
+    </div>
   );
 }

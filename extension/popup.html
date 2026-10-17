@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Planner</title>
+    <link rel="stylesheet" href="ui.css" />
+    <style>
+      body {
+        width: 300px;
+      }
+
+      main {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .name {
+        font-size: 16px;
+        font-weight: 500;
+        letter-spacing: -0.01em;
+      }
+
+      /* A label on the left, what it is on the right. */
+      .row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+        padding-top: 12px;
+        border-top: 1px solid var(--hairline);
+      }
+
+      .row dd {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        text-align: right;
+      }
+
+      .email {
+        margin-top: -12px;
+        overflow: hidden;
+        font-size: 12px;
+        text-align: right;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--faint);
+      }
+
+      [data-state="connected"] .dot {
+        background: var(--connected);
+      }
+
+      [data-state="unreachable"] .dot {
+        background: var(--unreachable);
+      }
+
+      /* The 24 learned hours, drawn like the Hours chart in Options. */
+      .hours {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding-top: 12px;
+        border-top: 1px solid var(--hairline);
+      }
+
+      .bars {
+        display: grid;
+        grid-template-columns: repeat(24, 1fr);
+        align-items: end;
+        gap: 2px;
+        height: 56px;
+      }
+
+      .bars i {
+        display: block;
+        border-radius: 1px;
+        background: var(--learned);
+      }
+
+      h2 {
+        font-size: inherit;
+        font-weight: inherit;
+      }
+
+      .solid {
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1 class="name">Planner</h1>
+      <dl>
+        <div class="row" id="status">
+          <dt class="quiet">Status</dt>
+          <dd><i class="dot"></i><span id="state"></span></dd>
+        </div>
+      </dl>
+      <p class="email quiet" id="email"></p>
+      <dl>
+        <div class="row">
+          <dt class="quiet">Lockdown</dt>
+          <dd id="lockdown"></dd>
+        </div>
+      </dl>
+      <section class="hours">
+        <h2 class="quiet">Hours</h2>
+        <div class="bars" id="bars" role="img" aria-label="Active hours"></div>
+      </section>
+      <button type="button" class="solid" id="open">Open Planner</button>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

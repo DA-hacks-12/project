@@ -2,14 +2,19 @@ import { Temporal } from "temporal-polyfill";
 
 // Two made-up schools, written the way Canvas writes its calendar feed, with
 // dates relative to today so the data never goes stale. For tests and demos:
-// /mock/state.ics and /mock/college.ics.
+// /mock/state.ics and /mock/college.ics. Everything upcoming falls in this
+// calendar week (through Saturday), so the week's plan shows all of it: the
+// entries are written over ten days and squeezed, in order, into the days left.
+
+/** The entries' days run 0 to 9. */
+const WRITTEN_OVER = 10;
 
 interface Entry {
   uid: string;
   title: string;
   course: string;
   courseId: number;
-  day: number; // days from today
+  day: number; // days from today, over ten days (squeezed into this week)
   at?: string; // local "HH:MM"; all-day (due 11:59pm) when missing
   minutes?: number; // calendar events only
   text?: string;
@@ -45,7 +50,7 @@ export const SCHOOLS: Record<
         course: "PSYC 1",
         courseId: 5103,
         day: 2,
-        at: "10:00",
+        at: "20:00",
         text: "10 multiple-choice questions on Chapter 6 (Memory). 20 minutes, one attempt. Open once you start.",
       },
       {
@@ -142,7 +147,7 @@ export const SCHOOLS: Record<
         course: "MATH 1A",
         courseId: 5105,
         day: 6,
-        at: "13:00",
+        at: "22:00",
         text: "In-class quiz on Sections 3.1-3.6. No calculators.",
       },
       {
@@ -183,7 +188,7 @@ export const SCHOOLS: Record<
         course: "SPAN 2",
         courseId: 77,
         day: 3,
-        at: "09:30",
+        at: "19:30",
         text: "25 vocabulary words from Unidad 4. 15 minutes.",
       },
       {
@@ -243,8 +248,11 @@ export function mockFeed(
     `X-WR-CALNAME:Mock Student Calendar (${icsText(name)})`,
   ];
   const now = Temporal.Now.zonedDateTimeISO(tz);
+  const left = 7 - (today.dayOfWeek % 7); // today through Saturday
   for (const entry of entries) {
-    const date = today.add({ days: entry.day });
+    const day =
+      entry.day < 0 ? entry.day : Math.floor((entry.day * left) / WRITTEN_OVER);
+    const date = today.add({ days: day });
     const kind = entry.uid.startsWith("event-calendar-event")
       ? "calendar_event"
       : "assignment";

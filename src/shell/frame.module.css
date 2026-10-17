@@ -17,6 +17,11 @@
 .item {
   justify-content: flex-start;
   margin: 0;
+  color: var(--gray-10);
+}
+
+.item[aria-current="page"] {
+  color: var(--gray-12);
 }
 
 .add {

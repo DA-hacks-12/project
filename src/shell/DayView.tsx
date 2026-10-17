@@ -5,7 +5,7 @@ import { Button, Flex, Heading, IconButton, Text } from "@radix-ui/themes";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Temporal } from "temporal-polyfill";
 import { clock } from "@/lib/time";
-import { hoursOf } from "@/modules/arrange/core/hours";
+import { bodyClockOf } from "@/modules/arrange/core/body-clock";
 import {
   current,
   dayView,
@@ -18,7 +18,6 @@ import styles from "./day.module.css";
 import { Feeds } from "./Feeds";
 import { LimitChip } from "./LimitChip";
 import { ReadingAll } from "./ReadingAll";
-import { Reminders } from "./Reminders";
 import { Reschedule } from "./Reschedule";
 import { Timeline } from "./Timeline";
 
@@ -54,21 +53,12 @@ export function DayView() {
   }
 
   return (
-    <Flex direction="column" gap="5">
-      <Flex justify="between" align="end" gap="4">
-        <Flex direction="column" gap="1">
-          <Heading size="8" className={styles.big}>
-            {WEEKDAY[date.dayOfWeek - 1]}
-            {today && <span className={styles.clock}> {clock(now)}</span>}
-          </Heading>
-          <Text size="3" color="gray">
-            {today
-              ? happening
-                ? `Now: ${titleOf(happening)}`
-                : "Now: free"
-              : date.toLocaleString("en-US", { month: "long", day: "numeric" })}
-          </Text>
-        </Flex>
+    <div className={styles.day}>
+      <header className={styles.head}>
+        <Heading size="8" className={styles.big}>
+          {WEEKDAY[date.dayOfWeek - 1]}
+          {today && <span className={styles.clock}> {clock(now)}</span>}
+        </Heading>
         <Flex gap="4" align="center">
           <DayNav date={date} today={today} />
           <Text size="2" color="gray" className={styles.progress}>
@@ -77,7 +67,14 @@ export function DayView() {
           <ReadingAll />
           <Reschedule />
         </Flex>
-      </Flex>
+        <Text size="3" color="gray">
+          {today
+            ? happening
+              ? `Now: ${titleOf(happening)}`
+              : "Now: free"
+            : date.toLocaleString("en-US", { month: "long", day: "numeric" })}
+        </Text>
+      </header>
 
       {(due.length > 0 ||
         planner.limits.some((l) => l.day === date.toString())) && (
@@ -85,7 +82,7 @@ export function DayView() {
           <LimitChip date={date} />
           {due.length > 0 && (
             <>
-              <Text size="2" color="gray">
+              <Text size="2" color="gray" mr="1">
                 Due
               </Text>
               {due.map((task) => (
@@ -98,12 +95,10 @@ export function DayView() {
 
       <Timeline
         items={items}
-        hours={hoursOf(planner.settings?.active_hours).hours}
+        hours={bodyClockOf(planner.settings ?? {}).hours}
         now={today ? now : null}
       />
-
-      <Reminders />
-    </Flex>
+    </div>
   );
 }
 

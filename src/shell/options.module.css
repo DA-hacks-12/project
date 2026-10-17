@@ -8,7 +8,7 @@
 
 .bar {
   display: block;
-  background: var(--grass-8);
+  background: var(--gray-a7);
   border-radius: 1px;
 }
 
@@ -19,11 +19,33 @@
 /* Big type sits on its ink, not its box: pull the side bearing back. */
 .big {
   margin-left: -0.045em;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-weight: 500;
+  letter-spacing: -0.02em;
 }
 
-/* Default hours, not learned: the same bars, quieter. */
-.quiet {
-  background: var(--gray-a6);
+/* Alertness through the day; the sharpest hours in full ink. */
+.sharp {
+  background: var(--ink);
+}
+
+.ticks {
+  display: grid;
+  grid-template-columns: repeat(24, 1fr);
+  margin-top: calc(-1 * var(--space-2));
+  color: var(--gray-10);
+  font-size: var(--font-size-1);
+}
+
+.ticks span {
+  white-space: nowrap;
+}
+
+.preferences {
+  display: grid;
+  gap: var(--space-2);
+}
+
+/* Every pair the same width, so the choices line up down the column. */
+.pair {
+  width: 320px;
 }

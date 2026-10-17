@@ -7,14 +7,14 @@ export type Database = {
           Tables: {
             "blocks": {
                   Row: {
-                    "details": string | null,"done": boolean,"id": string,"kind": string,"minutes": number,"owner_id": string,"rest": string | null,"start": string,"task_id": string | null,"title": string | null
+                    "details": string | null,"done": boolean,"id": string,"kind": string,"minutes": number,"owner_id": string,"place": Json | null,"rest": string | null,"start": string,"task_id": string | null,"title": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "details"?: string | null,"done"?: boolean,"id"?: string,"kind": string,"minutes": number,"owner_id"?: string,"rest"?: string | null,"start": string,"task_id"?: string | null,"title"?: string | null
+                    "details"?: string | null,"done"?: boolean,"id"?: string,"kind": string,"minutes": number,"owner_id"?: string,"place"?: Json | null,"rest"?: string | null,"start": string,"task_id"?: string | null,"title"?: string | null
                   }
                   Update: {
-                    "details"?: string | null,"done"?: boolean,"id"?: string,"kind"?: string,"minutes"?: number,"owner_id"?: string,"rest"?: string | null,"start"?: string,"task_id"?: string | null,"title"?: string | null
+                    "details"?: string | null,"done"?: boolean,"id"?: string,"kind"?: string,"minutes"?: number,"owner_id"?: string,"place"?: Json | null,"rest"?: string | null,"start"?: string,"task_id"?: string | null,"title"?: string | null
                   }
                   Relationships: [
                     {
@@ -73,30 +73,16 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
-                },"reminders": {
-                  Row: {
-                    "created_at": string,"done": boolean,"id": string,"owner_id": string,"text": string
-                  }
-                  ComputedFields: never
-                  Insert: {
-                    "created_at"?: string,"done"?: boolean,"id"?: string,"owner_id"?: string,"text": string
-                  }
-                  Update: {
-                    "created_at"?: string,"done"?: boolean,"id"?: string,"owner_id"?: string,"text"?: string
-                  }
-                  Relationships: [
-                    
-                  ]
                 },"settings": {
                   Row: {
-                    "active_hours": (number)[] | null,"owner_id": string,"places": NonNullable<Json>,"time_zone": string,"updated_at": string
+                    "active_hours": (number)[] | null,"break_minutes": number,"clock": string | null,"focus_minutes": number,"lockdown": boolean,"nights": Json | null,"owner_id": string,"places": NonNullable<Json>,"preferences": NonNullable<Json>,"time_zone": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "active_hours"?: (number)[] | null,"owner_id"?: string,"places"?: NonNullable<Json>,"time_zone"?: string,"updated_at"?: string
+                    "active_hours"?: (number)[] | null,"break_minutes"?: number,"clock"?: string | null,"focus_minutes"?: number,"lockdown"?: boolean,"nights"?: Json | null,"owner_id"?: string,"places"?: NonNullable<Json>,"preferences"?: NonNullable<Json>,"time_zone"?: string,"updated_at"?: string
                   }
                   Update: {
-                    "active_hours"?: (number)[] | null,"owner_id"?: string,"places"?: NonNullable<Json>,"time_zone"?: string,"updated_at"?: string
+                    "active_hours"?: (number)[] | null,"break_minutes"?: number,"clock"?: string | null,"focus_minutes"?: number,"lockdown"?: boolean,"nights"?: Json | null,"owner_id"?: string,"places"?: NonNullable<Json>,"preferences"?: NonNullable<Json>,"time_zone"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     

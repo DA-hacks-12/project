@@ -1,0 +1,80 @@
+/* The extension's pages in the app's look (src/app/globals.css): ink on a
+   near-black sheet, Geist, nothing heavier than medium, flat. The grays are
+   Radix's dark gray scale, as the app uses them. */
+
+@font-face {
+  font-family: "Geist";
+  src: url("fonts/Geist.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+:root {
+  --paper: #181818;
+  --ink: #ececec;
+  --quiet: #b4b4b4; /* gray-11 */
+  --faint: #7b7b7b; /* gray-10 */
+  --hairline: #ffffff1b; /* gray-a4 */
+  --soft: #ffffff12; /* gray-a3 */
+  --learned: #3e7949; /* grass-8, the learned hour bars */
+  --connected: #46a758; /* grass-9 */
+  --unreachable: #e54d2e; /* tomato-9 */
+  --ease-calm: cubic-bezier(0.4, 0, 0.2, 1);
+  --reading-pulse: 1.6s;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font:
+    14px / 1.43 "Geist",
+    system-ui,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* One focus ring, a quiet grey, as in the app. */
+:focus-visible {
+  outline: 2px solid var(--faint);
+  outline-offset: 2px;
+}
+
+/* Solid buttons are ink with paper text. */
+.solid {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 4px;
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 500;
+  transition: background 150ms var(--ease-calm);
+}
+
+.solid:hover {
+  background: #d4d4d4;
+}
+
+.solid.big {
+  height: 40px;
+  padding: 0 16px;
+  font-size: 16px;
+}
+
+.quiet {
+  color: var(--quiet);
+}

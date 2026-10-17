@@ -11,6 +11,7 @@ import {
 import { useState } from "react";
 import {
   type Scope,
+  useNearbyPlaces,
   useNow,
   useReschedule,
 } from "@/modules/planner/ui/planner";
@@ -29,6 +30,7 @@ export function RescheduleForm({
   defaultScope: Scope;
 }) {
   const reschedule = useReschedule();
+  const nearby = useNearbyPlaces();
   const { show } = useLastReschedule();
   const { at } = useNow();
   const [answer, setAnswer] = useState("");
@@ -47,10 +49,18 @@ export function RescheduleForm({
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        reschedule.mutate(
-          { at, scope, answer: answer.trim() || undefined, dismiss },
-          { onSuccess: (data) => show(data, scope, !!dismiss) },
-        );
+        nearby();
+        // Not `mutate`'s own callback: it is dropped if the popover is closed
+        // while this runs, and the answer (with its Undo) must still arrive.
+        reschedule
+          .mutateAsync({
+            at,
+            scope,
+            answer: answer.trim() || undefined,
+            dismiss,
+          })
+          .then((data) => show(data, scope, !!dismiss))
+          .catch(() => {});
       }}
     >
       <Flex direction="column" gap="3">

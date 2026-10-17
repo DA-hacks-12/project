@@ -14,7 +14,7 @@ import type { Work } from "@/modules/import/core/reading";
 // through Saturday (weeks start on Sunday).
 
 export const HORIZON_DAYS = 14; // tasks due this far out can already get time
-export const AWAKE = 10; // an hour with a smaller active share is never used
+export const AWAKE = 10; // alertness under this (asleep) is never used
 export const SESSION = { min: 10, max: 120 }; // minutes
 export const DEEP_PER_DAY = 240; // about four hours of hard thinking a day is the most people sustain
 export const FREE_SHARE = 1 / 3; // planning fallacy: a third of each day's open time stays free
@@ -63,8 +63,9 @@ export interface Proposal {
 
 export interface Plan {
   now: Zoned;
-  hours: number[];
-  learned: boolean; // false: default hours, the extension hasn't learned any
+  hours: number[]; // alertness per hour from the body clock: 0 asleep, else 10–100
+  clock: string; // the body clock in words, for the prompt
+  preferences: string[]; // the student's own wishes from Options, one line each
   days: Window[];
   ids: Map<string, OpenTask>; // "t1" → task
   busy: Span[]; // the student's events, breaks and sessions that stay where they are
@@ -232,16 +233,18 @@ export function message(plan: Plan): string {
   }
   lines.push(
     "",
-    ...(plan.learned
+    `Body clock: ${plan.clock}.`,
+    "Alertness by hour (0 = asleep, 100 = sharpest), the same every day:",
+    plan.hours
+      .map((value, h) => `${String(h).padStart(2, "0")}:00 ${value}`)
+      .join(" · "),
+    ...(plan.preferences.length
       ? [
-          "Active hours (share of recent days on the laptop), the same every day:",
-          plan.hours
-            .map((share, h) => `${String(h).padStart(2, "0")}:00 ${share}%`)
-            .join(" · "),
+          "",
+          "The student's preferences:",
+          ...plan.preferences.map((p) => `- ${p}`),
         ]
-      : [
-          `Active hours aren't known yet: treat ${plan.hours.findIndex((h) => h > 0)}:00 to ${plan.hours.findLastIndex((h) => h > 0) + 1}:00 as open, with no hour preferred over another.`,
-        ]),
+      : []),
     "",
     "Tasks:",
   );
@@ -271,7 +274,12 @@ export function message(plan: Plan): string {
     );
   }
   if (plan.current.length) {
-    lines.push("", "The plan before (keep it steady where you can):");
+    lines.push(
+      "",
+      plan.preferences.length
+        ? "The plan before (keep what already follows the student's preferences; change the rest to follow them):"
+        : "The plan before (keep it steady where you can):",
+    );
     for (const s of plan.current) {
       const tid = ids.get(s.task);
       const d = plan.days.findIndex((day) => ms(s.start) < ms(day.end));

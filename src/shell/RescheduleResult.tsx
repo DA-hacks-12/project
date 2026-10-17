@@ -8,8 +8,8 @@ import {
   useUndoReschedule,
 } from "@/modules/planner/ui/planner";
 
-// The last reschedule's answer: what moved, what the student's words changed,
-// and Undo. It always shows on the header's Reschedule button, so it stays in
+// The last reschedule's answer: a line of advice on what's wrong (when there
+// is one), what moved, what the student's words changed, and Undo. It always shows on the header's Reschedule button, so it stays in
 // reach even when the session it started from has moved away.
 
 export interface Last {
@@ -53,7 +53,7 @@ export function useLastReschedule() {
 
 export function RescheduleResult({ last }: { last: Last }) {
   const undo = useUndoReschedule();
-  const { moved, placed, unplaced, changes } = last.data;
+  const { moved, placed, unplaced, changes, advice } = last.data;
   const summary =
     last.scope === "week" && !last.fromSession
       ? `Planned ${placed} ${placed === 1 ? "session" : "sessions"} this week.`
@@ -62,6 +62,7 @@ export function RescheduleResult({ last }: { last: Last }) {
         : "Nothing to move.";
   return (
     <Flex direction="column" gap="2">
+      {advice && <Text size="2">{advice}</Text>}
       <Text size="2" weight="medium">
         {summary}
       </Text>

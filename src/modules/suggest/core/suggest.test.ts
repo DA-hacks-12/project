@@ -1,11 +1,9 @@
 import { expect, test } from "vitest";
 import { zoned } from "@/lib/time";
-import { freeTime } from "./free-time";
 import { checkPick } from "./rest";
 
 const TZ = "America/Los_Angeles";
 const AFTERNOON = zoned("2026-10-16T22:00:00Z", TZ); // 3pm
-const HOURS = [...Array(8).fill(5), ...Array(16).fill(60)];
 
 test("no break for vague answers or evening naps; lengths held to the research", () => {
   expect(checkPick({ kind: "none", minutes: 10 }, AFTERNOON)).toBeNull();
@@ -16,32 +14,6 @@ test("no break for vague answers or evening naps; lengths held to the research",
     rest: "nap",
     minutes: 20,
   });
-});
-
-test("free time names a real place when one is near", () => {
-  const session = {
-    start: AFTERNOON.with({ minute: 45 }),
-    end: AFTERNOON.with({ hour: 16, minute: 45 }),
-  };
-  const park = {
-    name: "Memorial Park",
-    kind: "park" as const,
-    lat: 0,
-    lon: 0,
-    km: 0.6,
-  };
-  const trail = {
-    name: "Stevens Creek Trail",
-    kind: "trail" as const,
-    lat: 0,
-    lon: 0,
-    km: 2.1,
-  };
-  const ideas = freeTime([session], HOURS, AFTERNOON, [park, trail]);
-  expect(ideas.map((i) => i.words)).toEqual([
-    "Walk to Memorial Park.",
-    "Go to Stevens Creek Trail.",
-  ]);
 });
 
 test("what's wrong becomes checked changes: days in the week, real times, short titles", async () => {

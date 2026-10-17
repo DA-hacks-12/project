@@ -2,12 +2,15 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { atClock, type Zoned, zoned } from "@/lib/time";
+import type { Clock, Night } from "@/modules/arrange/core/body-clock";
+import { km } from "@/modules/suggest/core/walk";
+import { courseColors } from "../core/courses";
 import { isReading, timeZoneOf } from "../core/items";
-import type { Planner } from "../core/queries";
 import * as q from "../core/queries";
+import { type Planner, placesOf } from "../core/queries";
 
 export const plannerKey = ["planner"];
 
@@ -29,6 +32,18 @@ export function usePlannerData(): Planner {
   const { data } = usePlanner();
   if (!data) throw new Error("The planner isn't loaded");
   return data;
+}
+
+/** A course's solid color (a CSS value); work without a course is gray. */
+export function useCourseColor(): (
+  course: string | null | undefined,
+) => string {
+  const { tasks } = usePlannerData();
+  const colors = useMemo(() => courseColors(tasks), [tasks]);
+  return (course) => {
+    const n = course ? colors.get(course) : undefined;
+    return n ? `var(--course-${n})` : "var(--event)";
+  };
 }
 
 /** Optimistic and ordered: the cache changes at once, writes land in order. */
@@ -91,6 +106,7 @@ export const useAddEvent = () =>
           kind: "event",
           task_id: null,
           rest: null,
+          place: null,
           done: false,
           ...draft,
         },
@@ -113,40 +129,41 @@ export const useDeleteBlock = () =>
     (p, { id }) => ({ ...p, blocks: p.blocks.filter((b) => b.id !== id) }),
   );
 
-export const useAddReminder = () =>
-  usePlannerMutation<{ id: string; text: string }>(
-    (db, { id, text }) => q.addReminder(db, id, text),
-    (p, { id, text }) => ({
-      ...p,
-      reminders: [
-        ...p.reminders,
-        {
-          id,
-          text,
-          done: false,
-          owner_id: "",
-          created_at: new Date().toISOString(),
-        },
-      ],
-    }),
-  );
-
-export const useSetReminderDone = () =>
-  usePlannerMutation<{ id: string; done: boolean }>(
-    (db, { id, done }) => q.setReminderDone(db, id, done),
-    (p, { id, done }) => ({
-      ...p,
-      reminders: p.reminders.map((r) => (r.id === id ? { ...r, done } : r)),
-    }),
-  );
-
-export const useSaveActiveHours = () =>
-  usePlannerMutation<{ hours: number[] }>(
-    (db, { hours }) => q.saveActiveHours(db, hours),
-    (p, { hours }) =>
+export const useSaveActivity = () =>
+  usePlannerMutation<{ hours: number[]; nights: Night[] }>(
+    (db, activity) => q.saveActivity(db, activity),
+    (p, { hours, nights }) =>
       p.settings
-        ? { ...p, settings: { ...p.settings, active_hours: hours } }
+        ? {
+            ...p,
+            settings: {
+              ...p.settings,
+              active_hours: hours,
+              nights: JSON.parse(JSON.stringify(nights)),
+            },
+          }
         : p,
+  );
+
+export const useSaveFocusSettings = () =>
+  usePlannerMutation<q.FocusSettings>(
+    (db, patch) => q.saveFocusSettings(db, patch),
+    (p, patch) =>
+      p.settings ? { ...p, settings: { ...p.settings, ...patch } } : p,
+  );
+
+export const useSaveClock = () =>
+  usePlannerMutation<{ clock: Clock | null }>(
+    (db, { clock }) => q.saveClock(db, clock),
+    (p, { clock }) =>
+      p.settings ? { ...p, settings: { ...p.settings, clock } } : p,
+  );
+
+export const useSavePreferences = () =>
+  usePlannerMutation<{ preferences: Record<string, string> }>(
+    (db, { preferences }) => q.savePreferences(db, preferences),
+    (p, { preferences }) =>
+      p.settings ? { ...p, settings: { ...p.settings, preferences } } : p,
   );
 
 /** Sign out here and go to the login screen, coming back to this page after. */
@@ -163,6 +180,8 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  }).catch(() => {
+    throw new Error("Couldn't reach Planner. Try again.");
   });
   // A session the server no longer accepts: clear it rather than fail again.
   if (response.status === 401) {
@@ -232,6 +251,8 @@ export interface Rescheduled {
   unplaced: number;
   changes: string[];
   undo: Undo;
+  /** One practical line on what's wrong, when there is one. Not saved. */
+  advice?: string;
 }
 
 export const rescheduleKey = ["reschedule"];
@@ -261,8 +282,10 @@ export function useRescheduleAround() {
   return (draft: q.EventDraft, id?: string) => {
     const start = Date.parse(draft.start);
     const end = start + draft.minutes * 60_000;
+    // Planned work, or a nature suggestion, that hasn't started yet.
     const clash = planner.blocks.some((b) => {
-      if (b.kind !== "session" || b.done || b.id === id) return false;
+      if (b.kind !== "session" && b.kind !== "nature") return false;
+      if (b.done || b.id === id) return false;
       const from = Date.parse(b.start);
       return (
         from >= now.epochMilliseconds &&
@@ -289,8 +312,42 @@ export const useDeleteLimit = () =>
     (p, { id }) => ({ ...p, limits: p.limits.filter((l) => l.id !== id) }),
   );
 
+/** How far the student can move before nearby places are found again. */
+const MOVED_KM = 3;
+
+/**
+ * Nature suggestions need places near the student. Reschedule asks the
+ * browser where they are (the browser asks permission the first time) and,
+ * when nothing is saved yet or they've moved, finds places in the background;
+ * the week's nature suggestions are planned once they're in.
+ */
+export function useNearbyPlaces(): () => void {
+  const planner = usePlannerData();
+  const find = useFindPlaces();
+  const { at } = useNow();
+  return () => {
+    if (!("geolocation" in navigator) || find.isPending) return;
+    const saved = placesOf(planner.settings);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const here = {
+          lat: position.coords.latitude,
+          lon: position.coords.longitude,
+        };
+        const from = saved[0]?.from;
+        if (from && km(from, here) < MOVED_KM) return;
+        find.mutate({ ...here, at });
+      },
+      () => {},
+      { maximumAge: 10 * 60_000, timeout: 15_000 },
+    );
+  };
+}
+
 export const useFindPlaces = () =>
-  useServerCall<{ lat: number; lon: number }, unknown>("/api/places");
+  useServerCall<{ lat: number; lon: number; at?: string }, unknown>(
+    "/api/places",
+  );
 
 /**
  * The clock in the student's time zone. `?at=HH:MM` pins it for demos;

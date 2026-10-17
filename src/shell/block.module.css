@@ -1,19 +1,52 @@
+/* Every block is one solid color (--fill): its course's for a session, a
+   quieter one for the rest. Ink on top. */
 .block {
   all: unset;
   box-sizing: border-box;
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   height: 100%;
   width: 100%;
-  padding: 6px 8px;
-  border-left: 3px solid;
+  padding: 10px 12px;
   border-radius: var(--radius-2);
   overflow: hidden;
   cursor: pointer;
-  color: var(--gray-12);
+  background: var(--fill);
+  color: var(--ink);
   font-size: var(--font-size-1);
   line-height: var(--line-height-1);
+}
+
+.event {
+  --fill: var(--event);
+}
+
+.break {
+  --fill: var(--break);
+}
+
+.nature {
+  --fill: var(--idea);
+}
+
+/* Hover is a quiet tint. */
+.block::after,
+.due::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--ink);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms var(--ease-calm);
+}
+
+.block:hover::after,
+.due:hover::after {
+  opacity: 0.08;
 }
 
 .block:focus-visible,
@@ -22,104 +55,100 @@
   outline-offset: 2px;
 }
 
-.compact {
-  padding: 3px 6px;
-  gap: 0;
-}
-
 .time {
-  color: var(--gray-11);
+  opacity: 0.75;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
   overflow: hidden;
+  overflow-wrap: break-word;
+  hyphens: auto;
   font-size: var(--font-size-2);
   font-weight: 500;
+  line-height: 1.3;
+}
+
+/* The course sits at the foot of the block. */
+.sub {
+  margin-top: auto;
+  overflow: hidden;
+  opacity: 0.75;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+.narrow {
+  padding: 8px;
+}
+
+.narrow .title {
+  font-size: var(--font-size-1);
+}
+
+/* In the week grid: one line of title, then the time. */
+.compact {
+  padding: 3px 6px;
+  gap: 0;
 }
 
 .compact .title {
+  display: block;
   font-size: var(--font-size-1);
-}
-
-.sub {
-  overflow: hidden;
-  color: var(--gray-11);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-.deep {
-  background: var(--grass-a4);
-  border-color: var(--grass-9);
-}
-.deep:hover {
-  background: var(--grass-a5);
-}
-
-.light {
-  background: var(--grass-a2);
-  border-color: var(--grass-7);
-}
-.light:hover {
-  background: var(--grass-a3);
+/* A short block in the week grid has room for one line only: title and time. */
+.line {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px;
 }
 
-.break {
-  background: var(--amber-a3);
-  border-color: var(--amber-9);
-}
-.break:hover {
-  background: var(--amber-a4);
+.line .title {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
-.event {
-  background: var(--gray-a3);
-  border-color: var(--gray-9);
-}
-.event:hover {
-  background: var(--gray-a4);
-}
-
-.idea {
-  border: 1px dashed var(--jade-8);
-  border-left: 3px solid var(--jade-8);
-  color: var(--jade-11);
-}
-.idea:hover {
-  background: var(--jade-a2);
-}
-.idea .time {
-  color: var(--jade-11);
+.line .time {
+  flex: 0 0 auto;
 }
 
 .done {
-  opacity: 0.6;
+  opacity: 0.45;
 }
-.done .title {
+
+.done .title,
+.done .chip {
   text-decoration: line-through;
 }
 
+/* An assignment due that day: a chip in its course's color. */
 .due {
   all: unset;
   box-sizing: border-box;
+  position: relative;
   display: inline-flex;
-  max-width: 260px;
-  padding: 3px 8px;
-  border: 1px solid var(--tomato-7);
+  max-width: 280px;
+  padding: 4px 10px;
   border-radius: var(--radius-2);
-  color: var(--tomato-11);
+  background: var(--fill);
+  color: var(--ink);
   cursor: pointer;
   font-size: var(--font-size-1);
+  line-height: var(--line-height-1);
 }
-.due:hover {
-  background: var(--tomato-a2);
-}
-.due .title {
-  font-size: var(--font-size-1);
+
+.chip {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .list {
@@ -149,4 +178,16 @@
     animation: none;
     opacity: 0.6;
   }
+}
+
+/* The map preview on pointing at a nature suggestion: the map edge to edge,
+   the place's name under it. */
+.preview {
+  padding: 0;
+  overflow: hidden;
+}
+
+.previewLabel {
+  margin: 0;
+  padding: 9px 12px;
 }

@@ -1,20 +1,62 @@
-/* Tokens come from Radix Themes (grass on sage). These rules keep the look
-   flat: floating cards get a hairline instead of a shadow, hover is a tint. */
+/* One dark look, in Renna's manner: ink on a near-black sheet, quiet text and
+   hairlines, color only where it means something (block kinds, due, now).
+   Radix Themes supplies the scales; these rules set the sheet, make the
+   accent ink, and keep everything flat: floating cards get an edge instead of
+   a shadow, hover is a tint. */
+
+:root {
+  --paper: #181818;
+  --ink: #ececec;
+  /* the edge of something floating: a quiet grey on dark, never a white line */
+  --edge: #3d3d3d;
+
+  /* Blocks are solid. Each course takes its own color (courseColors), all at
+     the same lightness so ink reads on every one; the rest are quieter. */
+  --course-1: oklch(0.5 0.12 255); /* blue */
+  --course-2: oklch(0.5 0.13 30); /* coral */
+  --course-3: oklch(0.5 0.13 305); /* violet */
+  --course-4: oklch(0.5 0.09 75); /* ochre */
+  --course-5: oklch(0.5 0.085 195); /* teal */
+  --course-6: oklch(0.5 0.13 350); /* pink */
+  --course-7: oklch(0.5 0.09 120); /* olive */
+  --course-8: oklch(0.5 0.12 280); /* indigo */
+  --event: oklch(0.32 0 0);
+  --break: oklch(0.34 0.03 70);
+  --idea: oklch(0.38 0.07 155);
+  color-scheme: dark;
+}
 
 html,
 body {
   height: 100%;
   margin: 0;
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
 }
 
 .radix-themes {
+  --default-font-family: var(--font-geist), system-ui, sans-serif;
+  --heading-font-family: var(--font-geist), system-ui, sans-serif;
+
+  --color-background: var(--paper);
+  --color-panel-solid: var(--paper);
+
+  /* Type is quiet: nothing heavier than medium. */
+  --font-weight-bold: 500;
+
+  /* Solid buttons are ink with paper text; the focus ring is a quiet grey. */
+  --accent-9: var(--ink);
+  --accent-10: #d4d4d4;
+  --accent-contrast: var(--paper);
+  --focus-8: var(--gray-10);
+
   /* Motion: every duration and curve lives here. */
   --ease-calm: cubic-bezier(0.4, 0, 0.2, 1);
   --reading-pulse: 1.6s;
   --reading-sweep: 1.4s;
   --progress-move: 400ms;
 
-  --hairline: var(--gray-a5);
+  --hairline: var(--gray-a4);
   --quiet: var(--gray-11);
   --faint: var(--gray-9);
 }
@@ -22,7 +64,12 @@ body {
 .rt-PopoverContent,
 .rt-DialogContent {
   box-shadow: none;
-  border: 1px solid var(--gray-a6);
+  border: 1px solid var(--edge);
+}
+
+/* A card taller than the room beside its block scrolls instead of leaving the screen. */
+.rt-PopoverContent {
+  max-height: var(--radix-popover-content-available-height);
 }
 
 :where(a) {

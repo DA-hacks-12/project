@@ -2,12 +2,12 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { activeHoursFromExtension } from "@/modules/extension/ui/bridge";
+import { activityFromExtension } from "@/modules/extension/ui/bridge";
 import type { Planner } from "@/modules/planner/core/queries";
 import {
   usePlanner,
   usePlannerData,
-  useSaveActiveHours,
+  useSaveActivity,
 } from "@/modules/planner/ui/planner";
 import { DayView } from "./DayView";
 import { Focus } from "./Focus";
@@ -66,16 +66,24 @@ function Loaded({
   return data ? children : null;
 }
 
-/** When the extension is installed, the app takes its active hours on load. */
+/** When the extension is installed, the app takes what it learned on load. */
 function ActiveHoursSync() {
   const planner = usePlannerData();
-  const save = useSaveActiveHours();
-  const saved = planner.settings?.active_hours?.join(",");
+  const save = useSaveActivity();
+  const saved = JSON.stringify([
+    planner.settings?.active_hours ?? null,
+    planner.settings?.nights ?? null,
+  ]);
   const { mutate } = save;
   useEffect(() => {
     let live = true;
-    activeHoursFromExtension().then((hours) => {
-      if (live && hours && hours.join(",") !== saved) mutate({ hours });
+    activityFromExtension().then((activity) => {
+      if (
+        live &&
+        activity &&
+        JSON.stringify([activity.hours, activity.nights]) !== saved
+      )
+        mutate(activity);
     });
     return () => {
       live = false;

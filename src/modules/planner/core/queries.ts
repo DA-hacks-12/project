@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Tables } from "@/lib/supabase/database.types";
+import type { Clock, Night } from "@/modules/arrange/core/body-clock";
 import type { Place } from "@/modules/suggest/core/places";
 
 // Everything a screen needs, loaded once and kept in the query cache. Plain
@@ -8,7 +9,6 @@ import type { Place } from "@/modules/suggest/core/places";
 export type Db = SupabaseClient<Database>;
 export type TaskRow = Tables<"tasks">;
 export type BlockRow = Tables<"blocks">;
-export type Reminder = Tables<"reminders">;
 export type Settings = Tables<"settings">;
 export type Feed = Tables<"feeds">;
 export type DayLimit = Tables<"day_limits">;
@@ -19,22 +19,19 @@ export interface Planner {
   feeds: Feed[];
   tasks: TaskRow[];
   blocks: BlockRow[];
-  reminders: Reminder[];
   limits: DayLimit[];
 }
 
 export async function fetchPlanner(db: Db): Promise<Planner> {
-  const [user, settings, feeds, tasks, blocks, reminders, limits] =
-    await Promise.all([
-      db.auth.getUser(),
-      db.from("settings").select("*").maybeSingle(),
-      db.from("feeds").select("*").order("name"),
-      db.from("tasks").select("*").order("due"),
-      db.from("blocks").select("*").order("start"),
-      db.from("reminders").select("*").order("created_at"),
-      db.from("day_limits").select("*").order("day"),
-    ]);
-  for (const result of [settings, feeds, tasks, blocks, reminders, limits])
+  const [user, settings, feeds, tasks, blocks, limits] = await Promise.all([
+    db.auth.getUser(),
+    db.from("settings").select("*").maybeSingle(),
+    db.from("feeds").select("*").order("name"),
+    db.from("tasks").select("*").order("due"),
+    db.from("blocks").select("*").order("start"),
+    db.from("day_limits").select("*").order("day"),
+  ]);
+  for (const result of [settings, feeds, tasks, blocks, limits])
     if (result.error) throw result.error;
   return {
     email: user.data.user?.email ?? null,
@@ -42,7 +39,6 @@ export async function fetchPlanner(db: Db): Promise<Planner> {
     feeds: feeds.data ?? [],
     tasks: tasks.data ?? [],
     blocks: blocks.data ?? [],
-    reminders: reminders.data ?? [],
     limits: limits.data ?? [],
   };
 }
@@ -95,20 +91,56 @@ export async function deleteBlock(db: Db, id: string) {
   check((await db.from("blocks").delete().eq("id", id)).error);
 }
 
-export async function addReminder(db: Db, id: string, text: string) {
-  check((await db.from("reminders").insert({ id, text })).error);
-}
-
-export async function setReminderDone(db: Db, id: string, done: boolean) {
-  check((await db.from("reminders").update({ done }).eq("id", id)).error);
-}
-
-export async function saveActiveHours(db: Db, hours: number[]) {
+export async function savePreferences(
+  db: Db,
+  preferences: Record<string, string>,
+) {
   check(
     (
       await db
         .from("settings")
-        .upsert({ active_hours: hours, updated_at: new Date().toISOString() })
+        .upsert({ preferences, updated_at: new Date().toISOString() })
+    ).error,
+  );
+}
+
+/** What the extension learned: active hours and nights. */
+export async function saveActivity(
+  db: Db,
+  activity: { hours: number[]; nights: Night[] },
+) {
+  check(
+    (
+      await db.from("settings").upsert({
+        active_hours: activity.hours,
+        nights: JSON.parse(JSON.stringify(activity.nights)),
+        updated_at: new Date().toISOString(),
+      })
+    ).error,
+  );
+}
+
+/** Focus settings: Lockdown and the pomodoro's lengths. */
+export type FocusSettings = Partial<
+  Pick<Settings, "lockdown" | "focus_minutes" | "break_minutes">
+>;
+
+export async function saveFocusSettings(db: Db, patch: FocusSettings) {
+  check(
+    (
+      await db
+        .from("settings")
+        .upsert({ ...patch, updated_at: new Date().toISOString() })
+    ).error,
+  );
+}
+
+export async function saveClock(db: Db, clock: Clock | null) {
+  check(
+    (
+      await db
+        .from("settings")
+        .upsert({ clock, updated_at: new Date().toISOString() })
     ).error,
   );
 }

@@ -51,6 +51,12 @@ export function clock(at: Zoned): string {
   return `${hour}:${String(at.minute).padStart(2, "0")}${at.hour < 12 ? "am" : "pm"}`;
 }
 
+/** "5:20–6:00pm"; the first am/pm only when they differ ("11:30am–12:15pm"). */
+export function clockRange(start: Zoned, end: Zoned): string {
+  const sameHalf = start.hour < 12 === end.hour < 12;
+  return `${sameHalf ? clock(start).slice(0, -2) : clock(start)}–${clock(end)}`;
+}
+
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTHS = [
   "Jan",

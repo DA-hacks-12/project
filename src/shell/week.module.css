@@ -1,7 +1,7 @@
 .big {
   margin-left: -0.045em;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-weight: 500;
+  letter-spacing: -0.02em;
 }
 
 /* FullCalendar's classic theme, coloured from the same Radix tokens. */
@@ -18,7 +18,7 @@
   --fc-classic-primary: var(--accent-9);
   --fc-classic-primary-foreground: var(--accent-contrast);
   --fc-classic-highlight: var(--accent-a3);
-  --fc-classic-today: var(--grass-a2);
+  --fc-classic-today: var(--gray-a2);
   --fc-classic-now: var(--tomato-9);
   font-size: var(--font-size-1);
 }

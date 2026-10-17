@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Planner</title>
+    <link rel="icon" href="icons/32.png" />
+    <link rel="stylesheet" href="ui.css" />
+    <style>
+      /* Only the site's name, while it's asked about; a distraction goes on to
+         the app's focus page. */
+      .screen {
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+      }
+
+      .host {
+        font-size: 16px;
+        visibility: hidden;
+      }
+
+      body[data-state="checking"] .host {
+        visibility: visible;
+        animation: pulse var(--reading-pulse) var(--ease-calm) infinite;
+      }
+
+      @keyframes pulse {
+        50% {
+          opacity: 0.4;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        body[data-state="checking"] .host {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="screen">
+      <p class="host quiet" id="host"></p>
+    </main>
+    <script src="blocked.js"></script>
+  </body>
+</html>

@@ -14,9 +14,13 @@ import {
 } from "@/lib/time";
 import type { Work } from "@/modules/import/core/reading";
 import type { Changes } from "@/modules/suggest/core/changes";
+import {
+  type NatureRestore,
+  refreshNature,
+} from "@/modules/suggest/core/nature-run";
 import { restWords } from "@/modules/suggest/core/rest";
 import { understand } from "@/modules/suggest/core/understand";
-import { hoursOf } from "./hours";
+import { bodyClockOf, describe } from "./body-clock";
 import {
   check,
   HORIZON_DAYS,
@@ -29,6 +33,7 @@ import {
   type Span,
   weekFrom,
 } from "./plan";
+import { preferenceRules, preferencesOf } from "./preferences";
 
 // Reschedule: "What's wrong?" → Claude turns the answer into changes (a
 // lighter day, busy time, a break now) → code checks and saves them → the
@@ -47,18 +52,20 @@ export type Scope =
 
 const SYSTEM = `You place a college student's coursework into work sessions within this school week (through Saturday).
 
-You get each day's open time and busy times, any lighter days, the student's active hours (for each hour, the share of recent days they were on their laptop then), their tasks with due time, minutes to place, a one-line description and whether the work is deep or light, and what is moving.
+You get each day's open time and busy times, any lighter days, the student's body clock (when they sleep, their chronotype, and their alertness hour by hour), their tasks with due time, minutes to place, a one-line description and whether the work is deep or light, and what is moving.
 
 Arrange it the way research on time and attention says:
 - Deadlines first. Work due within a day or two gets its time first and ends before it's due.
-- Match work to the clock. People think best at the hours they're usually most active. Put deep work in the hours with the highest active share and light work in lower ones. Never use an hour under 10%.
+- Match work to the body clock. Alertness builds after waking, peaks, and falls toward sleep (the synchrony effect: people do hard thinking best at their own peak). Put deep work in the most alert hours and light work in lower ones. Never use an hour marked 0: the student is asleep.
 - Spread long work out. Spaced sessions beat one long push: a task with more than 90 minutes left is split across several days before it's due.
 - One course at a time. Switching subjects costs focus, so put sessions of the same course next to each other and change course only after a break.
 - Breaks. Sessions run 25 to 90 minutes, with at least 10 minutes between them.
 - Leave room. People underestimate how long work takes, so keep at least a third of each day's open time free, and no more than 4 hours of deep work in a day.
 - Busy times (classes, work, breaks, sessions that stay) are fixed: never put a session over one.
 - A lighter day keeps within its minutes, and gets no deep work unless it says so.
-- Place only what the instruction says is moving, and keep the plan before steady where you can.
+- Place only what the instruction says is moving, and keep the plan before steady where you can, but the student's preferences come first: when the plan before doesn't follow them, change it.
+
+The student may also give preferences (how big the chunks are, what each day starts with, breaks, how many courses a day, how early to finish, weekends). Follow them over the research guidelines above, but never break a deadline, a busy time, a lighter day, the 4-hour deep cap or the free third.
 
 Return sessions with the task id, the day number, a start time as HH:MM (24-hour) and minutes.`;
 
@@ -75,8 +82,9 @@ const Arrangement = z.object({
 
 /** Everything a reschedule changed, so Undo can put it back exactly. */
 export interface Undo {
-  remove: { blocks: string[]; limits: string[] };
+  remove: { blocks: string[]; limits: string[]; dismissals?: string[] };
   restore: {
+    nature: NatureRestore[];
     sessions: {
       task_id: string;
       start: string;
@@ -95,17 +103,43 @@ export interface Rescheduled {
   undo: Undo;
 }
 
+/**
+ * If anything fails midway, what was already saved (a lighter day, a busy
+ * time, a break, the wait) is taken back, so a failed reschedule changes nothing.
+ */
 export async function reschedule(
   supabase: Client,
   nowDate: Date,
   options: { scope: Scope; answer?: string; dismiss?: string },
 ): Promise<Rescheduled> {
+  const undo: Undo = {
+    remove: { blocks: [], limits: [], dismissals: [] },
+    restore: { sessions: [], limits: [], nature: [] },
+  };
+  try {
+    return await rescheduleInto(supabase, nowDate, options, undo);
+  } catch (error) {
+    await undoReschedule(supabase, undo).catch((e) =>
+      console.error("rollback", e),
+    );
+    throw error;
+  }
+}
+
+async function rescheduleInto(
+  supabase: Client,
+  nowDate: Date,
+  options: { scope: Scope; answer?: string; dismiss?: string },
+  undo: Undo,
+): Promise<Rescheduled> {
   const { data: settings } = await supabase
     .from("settings")
-    .select("time_zone, active_hours")
+    .select("time_zone, nights, clock, preferences")
     .maybeSingle();
-  // Learned by the optional extension, or plain default hours until then.
-  const { hours, learned } = hoursOf(settings?.active_hours);
+  // Learned by the optional extension, set by the student, or a default.
+  const bodyClock = bodyClockOf(settings ?? {});
+  const { hours } = bodyClock;
+  const preferences = preferenceRules(preferencesOf(settings?.preferences));
   const tz = settings?.time_zone ?? "UTC";
   const now = zoned(nowDate, tz);
   const days = weekFrom(now);
@@ -135,10 +169,6 @@ export async function reschedule(
     addMinutes(b.at, b.minutes);
   const titles = new Map(taskRows.map((t) => [t.id, t.title]));
   const works = new Map(taskRows.map((t) => [t.id, t.work]));
-  const undo: Undo = {
-    remove: { blocks: [], limits: [] },
-    restore: { sessions: [], limits: [] },
-  };
   const changes: string[] = [];
 
   // The session the student rescheduled from, if any: it moves, and its task waits an hour.
@@ -146,10 +176,13 @@ export async function reschedule(
     ? blocks.find((b) => b.id === options.dismiss && b.kind === "session")
     : undefined;
   if (from?.task_id) {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("dismissals")
-      .insert({ task_id: from.task_id, at: iso(now) });
+      .insert({ task_id: from.task_id, at: iso(now) })
+      .select("id")
+      .single();
     if (error) throw error;
+    undo.remove.dismissals?.push(data.id);
   }
 
   // 1. What's wrong → changes, saved where the student can see and correct them.
@@ -360,8 +393,9 @@ export async function reschedule(
     .sort((a, b) => a.due.epochMilliseconds - b.due.epochMilliseconds);
 
   const busy: Span[] = [
+    // Nature suggestions never block anything: they're planned again after.
     ...blocks
-      .filter((b) => b.kind !== "session")
+      .filter((b) => b.kind !== "session" && b.kind !== "nature")
       .map((b) => ({
         start: b.at,
         end: ends(b),
@@ -423,7 +457,8 @@ export async function reschedule(
   const plan: Plan = {
     now,
     hours,
-    learned,
+    clock: describe(bodyClock),
+    preferences,
     days,
     ids: new Map(open.map((t, n) => [`t${n + 1}`, t])),
     busy,
@@ -497,11 +532,51 @@ export async function reschedule(
     if (error) throw error;
     undo.remove.blocks.push(...(data ?? []).map((b) => b.id));
   }
+  // 4. Nature suggestions on the days that changed are planned again around
+  // the new plan (all of them when the whole week was planned).
+  const dayIndex = (at: Zoned) =>
+    days.findIndex((_, d) => dateOf(d).equals(at.toPlainDate()));
+  const which =
+    scope.kind === "week"
+      ? days.map((_, d) => d)
+      : [
+          ...movable.map((b) => dayIndex(b.at)),
+          ...placed.map((s) => dayIndex(s.start)),
+          ...(found?.busy ?? []).map((b) => dayIndex(b.start)),
+          ...(found?.lighter ?? []).map((l) => l.day),
+          ...(found?.rest ? [0] : []),
+          ...(clash ? [dayIndex(clash.start)] : []),
+        ].filter((d) => d >= 0);
+  // Extra: if it fails, the plan still stands.
+  const nature = await refreshNature(supabase, {
+    now,
+    hours,
+    days,
+    which,
+  }).catch((error) => {
+    console.error("nature", error);
+    return { added: [], removed: [] };
+  });
+  undo.remove.blocks.push(...nature.added);
+  undo.restore.nature.push(...nature.removed);
+
   const placedMinutes = placed.reduce((sum, s) => sum + s.minutes, 0);
+  const newMinutes = placed.reduce(
+    (map, s) => map.set(s.task, (map.get(s.task) ?? 0) + s.minutes),
+    new Map<string, number>(),
+  );
   return {
     moved: movable.length,
     placed: placed.length,
-    unplaced: allowance ? Math.max(0, toPlace - placedMinutes) : 0,
+    unplaced: allowance
+      ? Math.max(0, toPlace - placedMinutes)
+      : // The whole week: minutes still owed to work due by Saturday.
+        open
+          .filter((t) => t.due.epochMilliseconds <= weekEnd.epochMilliseconds)
+          .reduce((sum, t) => {
+            const got = (done.get(t.id) ?? 0) + (newMinutes.get(t.id) ?? 0);
+            return sum + Math.max(0, (t.minutes ?? 0) - got);
+          }, 0),
     changes,
     undo,
   };
@@ -517,6 +592,13 @@ export async function undoReschedule(
       .from("blocks")
       .delete()
       .in("id", undo.remove.blocks);
+    if (error) throw error;
+  }
+  if (undo.remove.dismissals?.length) {
+    const { error } = await supabase
+      .from("dismissals")
+      .delete()
+      .in("id", undo.remove.dismissals);
     if (error) throw error;
   }
   if (undo.remove.limits.length) {
@@ -536,6 +618,12 @@ export async function undoReschedule(
     const { error } = await supabase
       .from("blocks")
       .insert(undo.restore.sessions.map((s) => ({ kind: "session", ...s })));
+    if (error) throw error;
+  }
+  if (undo.restore.nature.length) {
+    const { error } = await supabase
+      .from("blocks")
+      .insert(undo.restore.nature.map((n) => ({ kind: "nature", ...n })));
     if (error) throw error;
   }
 }

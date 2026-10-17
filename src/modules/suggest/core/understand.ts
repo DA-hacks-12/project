@@ -68,7 +68,7 @@ export async function understand(input: Understand): Promise<Changes | null> {
       `${d} · ${shortDate(day.end.subtract({ days: 1 }))}${d === 0 ? " (today)" : ""}`,
   );
   const text = [
-    `It's ${hhmm(input.now)}. Active share this hour: ${input.activeShare}%.`,
+    `It's ${hhmm(input.now)}. Alertness this hour: ${input.activeShare} (0 asleep, 100 sharpest).`,
     `Worked today: ${input.workedToday} min. Last break: ${input.lastBreakEnd ? `ended ${hhmm(input.lastBreakEnd)}` : "none yet"}.`,
     input.session
       ? `Rescheduling from a session: ${input.session.title} (${input.session.work} work).`

@@ -1,8 +1,25 @@
+/* The day fills the screen: the header, what's due, then the timeline. */
+.day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  height: 100%;
+}
+
+/* The day's name, with its tools on the same line; "Now" under the name. */
+.head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: var(--space-4);
+  row-gap: var(--space-1);
+}
+
 /* Big type sits on its ink, not its box: pull the side bearing back. */
 .big {
   margin-left: -0.045em;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-weight: 500;
+  letter-spacing: -0.02em;
 }
 
 .clock {

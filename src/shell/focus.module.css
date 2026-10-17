@@ -1,22 +1,90 @@
+/* Focus mode, full screen. Behind everything, a field that time fills. */
 .screen {
   position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  box-sizing: border-box;
   min-height: 100vh;
-  padding: 48px;
+  padding: 40px 48px;
+  overflow: hidden;
   background: var(--color-background);
+  isolation: isolate;
+}
+
+/* Work rises from the ground in the course's color; rest sinks back in
+   green. The level moves by transform alone, a second at a time, smoothly
+   while running. */
+.field {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: color-mix(in srgb, var(--course) 22%, var(--paper));
+  transform-origin: bottom;
+}
+
+.rest {
+  background: color-mix(in srgb, var(--idea) 35%, var(--paper));
+}
+
+.running .field,
+.running .segments i {
+  transition: transform 1s linear;
+}
+
+.top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.title {
+  max-width: 40ch;
+}
+
+.center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  /* a little above the middle, without reaching over the top bar */
+  padding-bottom: 12vh;
 }
 
 .clock {
-  font-size: 128px;
-  font-weight: 300;
+  font-size: clamp(120px, 18vw, 232px);
+  font-weight: 200;
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.04em;
   font-variant-numeric: tabular-nums;
 }
 
-.notes {
+/* The whole session: one bar per pomodoro and rest, filled as they pass. */
+.segments {
+  display: flex;
+  gap: 4px;
+  width: min(480px, 70vw);
+  height: 3px;
+  margin: var(--space-2) 0 var(--space-3);
+}
+
+.segments span {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1px;
+  background: var(--gray-a4);
+}
+
+.segments i {
   position: absolute;
-  bottom: 32px;
-  left: 40px;
+  inset: 0;
+  background: var(--ink);
+  transform-origin: left;
+}
+
+.restSegment i {
+  background: color-mix(in srgb, var(--idea) 70%, var(--ink));
 }
 
 .lofi {
@@ -25,6 +93,13 @@
   bottom: 32px;
   width: 256px;
   height: 144px;
-  border: 1px solid var(--hairline);
+  border: 1px solid var(--edge);
   border-radius: var(--radius-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .running .field,
+  .running .segments i {
+    transition: none;
+  }
 }

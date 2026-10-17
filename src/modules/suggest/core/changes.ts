@@ -65,7 +65,3 @@ export function checkChanges(
   );
   return { lighter: [...lighter.values()], busy, rest };
 }
-
-export function isEmpty(changes: Changes): boolean {
-  return !changes.lighter.length && !changes.busy.length && !changes.rest;
-}

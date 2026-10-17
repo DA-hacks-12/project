@@ -1,0 +1,29 @@
+{
+  "code": "Ok",
+  "routes": [
+    {
+      "geometry": {
+        "coordinates": [
+          [-122.083723, 37.386074],
+          [-122.076395, 37.397531],
+          [-122.064567, 37.399179]
+        ],
+        "type": "LineString"
+      },
+      "distance": 3138.7,
+      "duration": 2510.6,
+      "weight": 280.5,
+      "weight_name": "routability"
+    }
+  ],
+  "waypoints": [
+    {
+      "name": "Castro Street",
+      "location": [-122.083723, 37.386074]
+    },
+    {
+      "name": "",
+      "location": [-122.064567, 37.399179]
+    }
+  ]
+}

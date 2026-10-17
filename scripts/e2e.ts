@@ -10,15 +10,21 @@
 import { createClient } from "@supabase/supabase-js";
 import { Temporal } from "temporal-polyfill";
 import type { Database } from "../src/lib/supabase/database.types";
+import { bodyClockOf } from "../src/modules/arrange/core/body-clock";
+import { parseFeed } from "../src/modules/import/core/feed";
+import { mockFeed } from "../src/modules/import/core/mock";
 
 const APP = "http://localhost:3000";
 const SUPABASE = "http://127.0.0.1:54421";
 const KEY = "sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH";
 const TZ = "America/Los_Angeles";
-const HOURS = [
-  45, 20, 6, 3, 2, 2, 3, 8, 30, 55, 68, 72, 60, 58, 70, 78, 80, 65, 50, 72, 85,
-  82, 70, 60,
-];
+// What the extension learns: a late sleeper, about 1:30am to 9:30am.
+const NIGHTS = Array.from({ length: 14 }, (_, i) => ({
+  date: Temporal.Now.plainDateISO(TZ).subtract({ days: i }).toString(),
+  asleep: 75 + (i % 3) * 15,
+  up: 555 + (i % 2) * 30,
+}));
+const HOURS = bodyClockOf({ nights: NIGHTS }).hours;
 
 const failures: string[] = [];
 function check(ok: boolean, what: string) {
@@ -153,10 +159,7 @@ async function sessionsHold(v: Visitor, label: string) {
     late.length === 0,
     `${label}: every session ends before its task is due`,
   );
-  check(
-    asleep.length === 0,
-    `${label}: no session in an hour under 10% active`,
-  );
+  check(asleep.length === 0, `${label}: no session while asleep`);
   check(
     [...deep.values()].every((m) => m <= 240),
     `${label}: deep work ≤ 4h a day (max ${Math.max(0, ...deep.values())}m)`,
@@ -193,27 +196,41 @@ async function main() {
     timeZone: TZ,
     source: { kind: "link", url: `${APP}/mock/${school}.ics?tz=${TZ}` },
   });
+  // What each mock school holds right now: items timed earlier today are
+  // already past, so the counts come from the feed as it parses at this moment.
+  const upcomingOf = (school: "state" | "college") =>
+    parseFeed(mockFeed(school, today, TZ), TZ, new Date());
+  const stateUids = upcomingOf("state").map((x) => x.uid);
+  const collegeUids = upcomingOf("college").map((x) => x.uid);
+  const sharedUid = stateUids.find((u) => collegeUids.includes(u));
+  const nState = stateUids.length;
+  const nCollege = collegeUids.length;
+  const total = nState + nCollege;
+  check(
+    nState > 0 && nCollege > 0,
+    `mock schools hold ${nState} + ${nCollege}`,
+  );
   let [status, r] = await a.post("/api/import", link("state"));
   check(
     status === 200 &&
       r.school === "mockstate.instructure.com" &&
-      r.upcoming === 15,
+      r.upcoming === nState,
     `state link: ${JSON.stringify(r)}`,
   );
   check(
-    r.reading === 15,
-    `state link answers at once, 15 to read (${r.reading})`,
+    r.reading === nState,
+    `state link answers at once, ${nState} to read (${r.reading})`,
   );
   check(
-    await allRead(a, 15),
-    "state link: all 15 read by the model in the background",
+    await allRead(a, nState),
+    `state link: all ${nState} read by the model in the background`,
   );
   [status, r] = await a.post("/api/import", link("college"));
   check(
     status === 200 &&
       r.school === "canvas.mockcollege.edu" &&
-      r.upcoming === 4 &&
-      r.reading === 4,
+      r.upcoming === nCollege &&
+      r.reading === nCollege,
     `college link: ${JSON.stringify(r)}`,
   );
   const ics = await (await fetch(`${APP}/mock/state.ics?tz=${TZ}`)).text();
@@ -227,7 +244,7 @@ async function main() {
       r.reading === 0,
     `state upload joins the linked school, no new reads: ${JSON.stringify(r)}`,
   );
-  check(await allRead(a, 19), "college: all 4 read too");
+  check(await allRead(a, total), `college: all ${nCollege} read too`);
   [status] = await a.post("/api/import", {
     timeZone: TZ,
     source: { kind: "file", name: "x.ics", ics: "not a calendar" },
@@ -243,10 +260,10 @@ async function main() {
     .from("tasks")
     .select("*")
     .order("due");
-  check(tasks?.length === 19, `19 tasks (${tasks?.length})`);
+  check(tasks?.length === total, `${total} tasks (${tasks?.length})`);
   check(
-    tasks?.filter((t) => t.uid === "event-assignment-101").length === 2,
-    "the shared Canvas id exists once per school",
+    !!sharedUid && tasks?.filter((t) => t.uid === sharedUid).length === 2,
+    `the shared Canvas id (${sharedUid}) exists once per school`,
   );
   check(!!tasks?.every((t) => t.read), "every task has an interpretation");
   for (const t of tasks ?? []) {
@@ -278,7 +295,7 @@ async function main() {
       .sort()
       .join();
 
-  // The extension is optional: with no active hours, plans use 8am–11pm.
+  // The extension is optional: with no nights learned, plans use 8am–11pm.
   let [rs, moved] = await reschedule({ scope: "week", at: "13:00" });
   check(
     rs === 200 && moved.placed > 0,
@@ -298,15 +315,15 @@ async function main() {
   );
   const { error: hoursError } = await a.db
     .from("settings")
-    .upsert({ active_hours: HOURS });
+    .upsert({ nights: NIGHTS });
   check(
     !hoursError,
-    `with the extension, its learned hours are saved through RLS ${hoursError?.message ?? ""}`,
+    `with the extension, its learned nights are saved through RLS ${hoursError?.message ?? ""}`,
   );
   [rs, moved] = await reschedule({ scope: "week", at: "13:00" });
   check(
     rs === 200 && moved.placed > 0,
-    `plan the week from 1pm on learned hours: ${JSON.stringify({ ...moved, undo: undefined })}`,
+    `plan the week from 1pm on the learned body clock: ${JSON.stringify({ ...moved, undo: undefined })}`,
   );
   await sessionsHold(a, "week plan");
   const weekEnd = today.add({
@@ -518,7 +535,11 @@ async function main() {
   }
 
   console.log("Done and remove");
-  const firstTask = tasks?.find((t) => Date.parse(t.due) > Date.now());
+  // From the school that stays, so the privacy check below has it to look at.
+  const stays = feeds?.find((f) => f.name === "mockstate.instructure.com");
+  const firstTask = tasks?.find(
+    (t) => t.feed_id === stays?.id && Date.parse(t.due) > Date.now(),
+  );
   if (!firstTask) throw new Error("no open task");
   const { error: doneError } = await a.db
     .from("tasks")
@@ -534,8 +555,8 @@ async function main() {
     .eq("id", college?.id ?? "");
   const { data: left = [] } = await a.db.from("tasks").select("id");
   check(
-    !removeError && left?.length === 15,
-    `removing the college takes its 4 tasks with it (${left?.length} left)`,
+    !removeError && left?.length === nState,
+    `removing the college takes its ${nCollege} tasks with it (${left?.length} left)`,
   );
   const ids = new Set(left?.map((t) => t.id));
   const { data: sessions = [] } = await a.db

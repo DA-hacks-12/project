@@ -33,6 +33,16 @@ await context.addInitScript(() => {
               45, 20, 6, 3, 2, 2, 3, 8, 30, 55, 68, 72, 60, 58, 70, 78, 80, 65,
               50, 72, 85, 82, 70, 60,
             ],
+            // A late sleeper: about 1:30am to 9:30am, two weeks of nights.
+            nights: Array.from({ length: 14 }, (_, i) => {
+              const day = new Date(Date.now() - i * 86_400_000);
+              const date = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+              return {
+                date,
+                asleep: 75 + (i % 3) * 15,
+                up: 555 + (i % 2) * 30,
+              };
+            }),
           }
         : { ok: true };
     window.postMessage(
@@ -89,7 +99,7 @@ function ok(cond: unknown, msg: string): asserts cond {
 const day = (extra = "") => `${BASE}/day?at=${AT}${extra}`;
 // The newest card: a closing one can still be fading out.
 const popover = () => page.locator(".rt-PopoverContent").last();
-// Blocks carry data-kind: session, break, event, idea, due.
+// Blocks carry data-kind: session, break, event, nature, due.
 const blockBtn = (kind: string) =>
   page.locator(
     kind === "block"
@@ -135,7 +145,7 @@ await flow("1 options", async () => {
   notes.push(
     `state result: ${await dlg.getByText(/\d+ upcoming/).innerText()}`,
   );
-  // The model reads in the background: a progress bar and "Reading n of 15".
+  // The model reads in the background: a progress bar and "Reading n of 14".
   await dlg.getByRole("progressbar").first().waitFor({ timeout: 10000 });
   notes.push(
     `while reading: ${await dlg
@@ -144,7 +154,7 @@ await flow("1 options", async () => {
       .innerText()}`,
   );
   await snap("options-reading");
-  await dlg.getByText(/15 assignments · link/).waitFor({ timeout: LONG });
+  await dlg.getByText(/14 assignments · link/).waitFor({ timeout: LONG });
   await snap("options-state-added");
   await link.fill(COLLEGE);
   await dlg.getByRole("button", { name: "Add", exact: true }).click();
@@ -157,7 +167,15 @@ await flow("1 options", async () => {
     .getByText(/canvas\.mockcollege\.edu/)
     .first()
     .waitFor();
-  await dlg.getByText(/4 assignments · link/).waitFor({ timeout: LONG });
+  // The college has 4 entries, one of them a morning quiz that is already past
+  // after 9:30am, so its count depends on the hour: wait for both rows to settle.
+  await page.waitForFunction(
+    () =>
+      (document.body.innerText.match(/\d+ assignments · (link|file)/g) ?? [])
+        .length === 2,
+    null,
+    { timeout: LONG },
+  );
   notes.push(
     `after college: ${await dlg.getByText(/\d+ upcoming/).innerText()}`,
   );
@@ -176,6 +194,11 @@ await flow("1 options", async () => {
     .first()
     .waitFor({ timeout: LONG })
     .catch(() => {});
+  await page.waitForFunction(
+    () => !/Reading \d+ of/.test(document.body.innerText),
+    null,
+    { timeout: LONG },
+  );
   const rows = await dlg.getByText(/assignments ·/).allInnerTexts();
   notes.push(`school rows after upload: ${JSON.stringify(rows)}`);
   ok(rows.length === 2, `2 school rows, got ${rows.length}`);
@@ -190,36 +213,24 @@ await flow("1 options", async () => {
   // hours
   ok(
     (await dlg
-      .locator('[role=img][aria-label="Active hours"] > span')
+      .locator('[role=img][aria-label="Alertness by hour"] > span')
       .count()) === 24,
     "24 hour bars",
   );
-  await dlg.getByText("Learned from your browser").waitFor({ timeout: 10000 });
+  await dlg
+    .getByText(/From your browser, 14 nights/)
+    .waitFor({ timeout: 10000 });
+  ok(
+    await dlg.getByText(/Late type/).isVisible(),
+    "the body clock reads a late type from the nights",
+  );
   ok(
     await dlg.getByText("Extension connected").isVisible(),
     "the extension shows as connected",
   );
-  // places
-  await dlg.getByRole("button", { name: "Find near me" }).click();
-  const t = Date.now();
-  // OpenStreetMap's public servers are sometimes all down: then the app says so
-  // and free time falls back to ideas without a place. Noted, not failed.
-  await dlg
-    .getByText(/ km|OpenStreetMap/)
-    .first()
-    .waitFor({ timeout: 180_000 });
-  placesFound = await dlg
-    .getByText(/ km/)
-    .first()
-    .isVisible()
-    .catch(() => false);
-  notes.push(
-    placesFound
-      ? `places took ${((Date.now() - t) / 1000).toFixed(0)}s; list: ${JSON.stringify(await dlg.getByText(/· [\d.]+ km/).allInnerTexts())}`
-      : `places: OpenStreetMap unavailable (${await dlg
-          .getByText(/OpenStreetMap/)
-          .first()
-          .innerText()})`,
+  ok(
+    !(await dlg.getByRole("button", { name: "Find near me" }).count()),
+    "no Places section: places are found on Reschedule",
   );
   // remove ask + keep
   const row = dlg
@@ -252,7 +263,6 @@ await flow("2 day view", async () => {
     "Due row",
   );
   ok((await page.locator('[class*="tick"]').count()) >= 12, "hour ticks");
-  ok(await page.getByLabel("Reminders").isVisible(), "Reminders field");
   notes.push(
     `due chips: ${await page.locator('button[data-kind="due"]').count()}`,
   );
@@ -294,20 +304,23 @@ await flow("3 reschedule the week", async () => {
   await page.keyboard.press("Escape");
   await page.waitForTimeout(500);
   const sessions = await blockBtn("block").count();
-  notes.push(
-    `blocks visible after reschedule: ${sessions}; ideas: ${await blockBtn("idea").count()}`,
-  );
   ok(sessions > 0, "session blocks on timeline");
-  const ideas = await blockBtn("idea").allInnerTexts();
+  // Reschedule found places near the (faked) location in the background, then
+  // planned nature suggestions. OpenStreetMap is sometimes down, and today may
+  // have no daylight gap left: noted, not failed.
+  const waited = Date.now();
+  placesFound = await blockBtn("nature")
+    .first()
+    .waitFor({ timeout: 180_000 })
+    .then(() => true)
+    .catch(() => false);
+  const nature = await blockBtn("nature").allInnerTexts();
   notes.push(
-    `idea blocks: ${JSON.stringify(ideas.map((s) => s.replace(/\n/g, " ")))}`,
+    placesFound
+      ? `nature after ${((Date.now() - waited) / 1000).toFixed(0)}s: ${JSON.stringify(nature.map((s) => s.replace(/\n/g, " ")))}`
+      : "no nature suggestion today (no places found, or no daylight gap left)",
   );
-  ok(ideas.length > 0, "free-time ideas shown today");
-  if (placesFound)
-    ok(
-      ideas.some((s) => /(Walk|Go) to /.test(s)),
-      "idea names a real place",
-    );
+  ok(nature.length <= 1, "at most one nature suggestion a day");
 });
 
 await flow("4 session card, done, undo", async () => {
@@ -393,22 +406,25 @@ await flow("5 due chip", async () => {
   ok(/done/.test((await chip.getAttribute("class")) ?? ""), "chip done style");
 });
 
-await flow("6 idea card", async () => {
-  const idea = placesFound
-    ? blockBtn("idea")
-        .filter({ hasText: /(Walk|Go) to / })
-        .first()
-    : blockBtn("idea").first();
-  await idea.click();
-  const p = popover();
-  await p.locator("svg").first().waitFor();
-  ok(await p.locator("svg").first().isVisible(), "tree picture");
-  if (placesFound) {
-    ok(await p.getByText("Open map").isVisible(), "map link");
-    ok(await p.getByText(/km away/).isVisible(), "distance");
+await flow("6 nature card", async () => {
+  if (!placesFound) {
+    notes.push("nature card skipped: no nature suggestion today");
+    return;
   }
-  notes.push(`idea card: ${(await p.innerText()).replace(/\n/g, " | ")}`);
-  await snap("idea-card");
+  await blockBtn("nature").first().click();
+  const p = popover();
+  await p.locator(".leaflet-container").waitFor({ timeout: 15_000 });
+  ok(await p.getByText(/min walk each way/).isVisible(), "the walk each way");
+  ok(
+    /fossgis_osrm_foot/.test(
+      (await p
+        .getByRole("link", { name: "Directions" })
+        .getAttribute("href")) ?? "",
+    ),
+    "Directions on foot",
+  );
+  notes.push(`nature card: ${(await p.innerText()).replace(/\n/g, " | ")}`);
+  await snap("nature-card");
   await page.keyboard.press("Escape");
 });
 
@@ -494,25 +510,6 @@ await flow("7 add event/edit/delete", async () => {
   await page.keyboard.press("Escape");
 });
 
-await flow("8 reminders", async () => {
-  await page.goto(day());
-  const f = page.getByLabel("Reminders");
-  await f.fill("buy food");
-  await f.press("Enter");
-  const cb = page.getByRole("checkbox").last();
-  await page.getByText("buy food").waitFor();
-  await snap("reminder");
-  await page
-    .getByText("buy food")
-    .locator("xpath=ancestor::label")
-    .getByRole("checkbox")
-    .click();
-  await page
-    .getByText("buy food")
-    .waitFor({ state: "detached", timeout: 5000 });
-  void cb;
-});
-
 await flow("9 day navigation", async () => {
   await page.goto(day());
   await page.getByLabel("Next day").click();
@@ -580,27 +577,30 @@ await flow("10 week", async () => {
 
 await flow("11 focus", async () => {
   await page.goto(day());
-  const link = page.getByRole("link", { name: "Focus", exact: true });
-  const hasLink = await link.count();
-  notes.push(`sidebar Focus enabled: ${hasLink > 0}`);
-  if (hasLink) await link.click();
-  else {
-    await blockBtn("block").first().click();
-    await popover().getByRole("link", { name: "Focus" }).click();
-  }
-  await page.waitForURL(/\/focus\//);
-  await page.getByText("25:00").first().waitFor();
-  ok(await page.getByText(/Focus · 1 of \d+/).isVisible(), "Focus · 1 of N");
-  await snap("focus-before");
+  // Focus is per task: no sidebar link, only a session's card.
   ok(
-    await page.getByText("Lockdown").isVisible(),
-    "with the extension, Focus offers Lockdown",
+    !(await page.locator("nav").getByRole("link", { name: "Focus" }).count()),
+    "no Focus in the sidebar",
   );
-  ok(await page.getByRole("switch").isChecked(), "Lockdown is on by default");
+  await blockBtn("session").first().click();
+  await popover().getByRole("link", { name: "Focus" }).click();
+  await page.waitForURL(/\/focus\//);
+  await page
+    .getByText(/^\d+:00$/)
+    .first()
+    .waitFor();
+  ok(await page.getByText(/^Focus 1 of \d+$/).isVisible(), "Focus 1 of N");
+  await snap("focus-before");
+  // Lockdown is a setting in Options; focus mode only tells the extension.
+  ok(
+    !(await page.getByRole("switch").count()),
+    "focus mode has no Lockdown switch",
+  );
+  const first = await page.locator('[class*="clock"]').first().innerText();
   await page.getByRole("button", { name: "Start" }).click();
   await page.waitForTimeout(2500);
   const clock = await page.locator('[class*="clock"]').first().innerText();
-  ok(clock.trim() !== "25:00", `clock counts down, got ${clock}`);
+  ok(clock.trim() !== first.trim(), `clock counts down, got ${clock}`);
   const log = await page.evaluate(() =>
     (
       window as unknown as { __extensionLog: { type: string }[] }
@@ -696,12 +696,13 @@ await flow("14 without the extension", async () => {
   await other.goto(`${BASE}/options`);
   await other.getByText("Extension not connected").waitFor({ timeout: 10000 });
   ok(
-    await other.getByText(/Default, 8am to 11pm/).isVisible(),
-    "default hours shown",
+    (await other.getByText(/^Default$/).isVisible()) &&
+      (await other.getByText(/Up around 8am, asleep around 11pm/).isVisible()),
+    "the default body clock shown",
   );
   await other.getByLabel("Canvas feed link").fill(STATE);
   await other.getByRole("button", { name: "Add", exact: true }).click();
-  await other.getByText(/15 assignments · link/).waitFor({ timeout: LONG });
+  await other.getByText(/14 assignments · link/).waitFor({ timeout: LONG });
   await other.goto(`${BASE}/day?at=${AT}`);
   await other.getByRole("button", { name: "Reschedule", exact: true }).click();
   await other
@@ -724,7 +725,7 @@ await flow("14 without the extension", async () => {
   await other.getByRole("button", { name: "Start" }).waitFor();
   ok(
     !(await other.getByText("Lockdown").isVisible()),
-    "no Lockdown without the extension",
+    "focus mode doesn't mention Lockdown",
   );
   await other.screenshot({ path: `${OUT}/no-extension-focus.png` });
   await plain.close();

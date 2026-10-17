@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import { zoned } from "@/lib/time";
-import { check, type OpenTask, type Plan, weekFrom } from "./plan";
+import { check, message, type OpenTask, type Plan, weekFrom } from "./plan";
+import { preferenceRules } from "./preferences";
 
 const TZ = "America/Los_Angeles";
 const NOW = zoned("2026-10-16T21:00:00Z", TZ); // Friday 2pm
@@ -28,7 +29,8 @@ function plan(tasks: OpenTask[], extra: Partial<Plan> = {}): Plan {
   return {
     now: NOW,
     hours: HOURS,
-    learned: true,
+    clock: "Up around 8am, asleep around 11pm",
+    preferences: [],
     days,
     ids: new Map(tasks.map((t, n) => [`t${n + 1}`, t])),
     busy: [],
@@ -142,4 +144,13 @@ test("when only some work moves, each task places just what moved", () => {
     plan([task("a"), task("b")], { allowance }),
   );
   expect(starts(placed)).toEqual(["a 5 16:00"]);
+});
+
+test("the student's preferences reach the planner, and nothing when unset", () => {
+  const tasks = [task("essay")];
+  expect(message(plan(tasks))).not.toContain("preferences");
+  const text = message(
+    plan(tasks, { preferences: preferenceRules({ sessions: "long" }) }),
+  );
+  expect(text).toContain("The student's preferences:\n- Big chunks");
 });

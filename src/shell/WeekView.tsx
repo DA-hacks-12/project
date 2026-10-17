@@ -9,7 +9,7 @@ import { ChevronLeftIcon, ChevronRightIcon } from "@radix-ui/react-icons";
 import { Button, Flex, Heading, IconButton } from "@radix-ui/themes";
 import dynamic from "next/dynamic";
 import { iso } from "@/lib/time";
-import { hoursOf } from "@/modules/arrange/core/hours";
+import { bodyClockOf } from "@/modules/arrange/core/body-clock";
 import { AWAKE } from "@/modules/arrange/core/plan";
 import { dayView, type Item, timeZoneOf } from "@/modules/planner/core/items";
 import type { TaskRow } from "@/modules/planner/core/queries";
@@ -56,7 +56,7 @@ export function WeekView() {
     }
   }
 
-  const { hours } = hoursOf(planner.settings?.active_hours);
+  const { hours } = bodyClockOf(planner.settings ?? {});
   const firstAwake = hours
     ? hours.findIndex((share, h) => h >= 5 && share >= AWAKE)
     : -1;
@@ -109,6 +109,7 @@ export function WeekView() {
           slotMaxTime="24:00:00"
           allDayText="Due"
           nowIndicator
+          slotEventOverlap={false}
           height="auto"
           eventColor="transparent"
           dayHeaderFormat={{ weekday: "short", day: "numeric" }}

@@ -2,8 +2,10 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { atClock, zoned } from "@/lib/time";
 import { reschedule } from "@/modules/arrange/core/arrange";
+import { advise } from "@/modules/suggest/core/advise";
 
-// Two model calls at most: understanding the answer, then placing the work.
+// Two model calls in turn at most (understanding the answer, then placing the
+// work), with the one-line advice on the answer running beside them.
 export const maxDuration = 120;
 
 const Body = z.object({
@@ -44,13 +46,19 @@ export async function POST(request: Request) {
   }
   const { scope, answer, dismiss } = body.data;
   try {
-    return Response.json(
-      await reschedule(supabase, now, {
+    // Advice is extra: if it fails, the reschedule still answers, without it.
+    const [result, advice] = await Promise.all([
+      reschedule(supabase, now, {
         scope: typeof scope === "string" ? { kind: scope } : scope,
         answer,
         dismiss,
       }),
-    );
+      advise(supabase, now, { answer, dismiss }).catch((error) => {
+        console.error("advice", error);
+        return null;
+      }),
+    ]);
+    return Response.json(advice ? { ...result, advice } : result);
   } catch (error) {
     console.error("reschedule", error);
     return Response.json(

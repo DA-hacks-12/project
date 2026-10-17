@@ -4,7 +4,6 @@ import type { Zoned } from "@/lib/time";
 // research supports. Code writes the words shown; the model only picks.
 
 export type Rest = "nap" | "walk" | "eat" | "move";
-export const RESTS: Rest[] = ["nap", "walk", "eat", "move"];
 
 export const LENGTH: Record<Rest, { min: number; max: number }> = {
   nap: { min: 10, max: 20 }, // longer naps leave you groggy
