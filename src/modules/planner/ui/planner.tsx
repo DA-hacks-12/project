@@ -21,7 +21,7 @@ import {
   timeZoneOf,
 } from "../core/items";
 import * as q from "../core/queries";
-import { type Planner, placesOf } from "../core/queries";
+import { originOf, type Planner, placesOf } from "../core/queries";
 
 export const plannerKey = ["planner"];
 
@@ -468,23 +468,32 @@ export function useWalks(): (dates?: string[]) => Promise<WalkUndo | null> {
     })
       .then((here) => {
         const saved = placesOf(planner.settings);
-        const from = saved[0]?.from;
-        if (here && !find.isPending && (!from || km(from, here) >= MOVED_KM))
+        const origin = originOf(planner.settings);
+        // A place the student typed stays where it is.
+        if (origin?.source === "typed" || find.isPending)
+          return plan.mutateAsync({ dates, at });
+        // The browser's position: when there's none yet, it's better than
+        // the approximate one, or they've moved.
+        if (
+          here &&
+          (!origin ||
+            origin.source === "connection" ||
+            km(origin, here) >= MOVED_KM)
+        )
           return find.mutateAsync({ ...here, at });
         // No position from the browser and no places yet: the server finds
         // them near where the connection comes from (approximate).
-        if (!here && !saved.length && !find.isPending)
-          return find.mutateAsync({ at });
+        if (!here && !saved.length) return find.mutateAsync({ at });
         return plan.mutateAsync({ dates, at });
       })
       .catch(() => null);
 }
 
 export const useFindPlaces = () =>
-  useServerCall<{ lat?: number; lon?: number; at?: string }, WalkUndo>(
-    "/api/places",
-    natureKey,
-  );
+  useServerCall<
+    { lat?: number; lon?: number; query?: string; at?: string },
+    WalkUndo
+  >("/api/places", natureKey);
 
 /**
  * The clock in the student's time zone. `?at=HH:MM` pins it for demos;

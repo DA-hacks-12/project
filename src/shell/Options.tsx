@@ -35,11 +35,12 @@ import {
 } from "@/modules/planner/ui/planner";
 import { Classes } from "./Classes";
 import { Feeds } from "./Feeds";
+import { Location } from "./Location";
 import styles from "./options.module.css";
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
-/** Options, as its own page: schools, classes, the body clock, preferences, focus and the account. */
+/** Options, as its own page: schools, classes, where walks start, the body clock, preferences, focus and the account. */
 export function Options() {
   return (
     <Flex direction="column" gap="5" className={styles.page}>
@@ -52,6 +53,10 @@ export function Options() {
       <Separator size="4" />
       <Section title="Classes">
         <Classes />
+      </Section>
+      <Separator size="4" />
+      <Section title="Location">
+        <Location />
       </Section>
       <Separator size="4" />
       <Section title="Body clock">

@@ -89,14 +89,14 @@ isOneToOne: false
                   ]
                 },"settings": {
                   Row: {
-                    "active_hours": (number)[] | null,"break_minutes": number,"clock": string | null,"focus_minutes": number,"lockdown": boolean,"nights": Json | null,"owner_id": string,"places": NonNullable<Json>,"planning_since": string | null,"preferences": NonNullable<Json>,"time_zone": string,"updated_at": string
+                    "active_hours": (number)[] | null,"break_minutes": number,"clock": string | null,"focus_minutes": number,"lockdown": boolean,"nights": Json | null,"origin": Json | null,"owner_id": string,"places": NonNullable<Json>,"planning_since": string | null,"preferences": NonNullable<Json>,"time_zone": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "active_hours"?: (number)[] | null,"break_minutes"?: number,"clock"?: string | null,"focus_minutes"?: number,"lockdown"?: boolean,"nights"?: Json | null,"owner_id"?: string,"places"?: NonNullable<Json>,"planning_since"?: string | null,"preferences"?: NonNullable<Json>,"time_zone"?: string,"updated_at"?: string
+                    "active_hours"?: (number)[] | null,"break_minutes"?: number,"clock"?: string | null,"focus_minutes"?: number,"lockdown"?: boolean,"nights"?: Json | null,"origin"?: Json | null,"owner_id"?: string,"places"?: NonNullable<Json>,"planning_since"?: string | null,"preferences"?: NonNullable<Json>,"time_zone"?: string,"updated_at"?: string
                   }
                   Update: {
-                    "active_hours"?: (number)[] | null,"break_minutes"?: number,"clock"?: string | null,"focus_minutes"?: number,"lockdown"?: boolean,"nights"?: Json | null,"owner_id"?: string,"places"?: NonNullable<Json>,"planning_since"?: string | null,"preferences"?: NonNullable<Json>,"time_zone"?: string,"updated_at"?: string
+                    "active_hours"?: (number)[] | null,"break_minutes"?: number,"clock"?: string | null,"focus_minutes"?: number,"lockdown"?: boolean,"nights"?: Json | null,"origin"?: Json | null,"owner_id"?: string,"places"?: NonNullable<Json>,"planning_since"?: string | null,"preferences"?: NonNullable<Json>,"time_zone"?: string,"updated_at"?: string
                   }
                   Relationships: [
                     

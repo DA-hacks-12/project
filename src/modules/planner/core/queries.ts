@@ -48,6 +48,23 @@ export async function fetchPlanner(db: Db): Promise<Planner> {
   };
 }
 
+/** Where the walks start from, and how it was had. */
+export interface Origin {
+  lat: number;
+  lon: number;
+  source: "typed" | "browser" | "connection";
+  label?: string;
+}
+
+export function originOf(settings: Settings | null): Origin | null {
+  const origin = settings?.origin as unknown as Origin | null | undefined;
+  if (origin && Number.isFinite(origin.lat) && Number.isFinite(origin.lon))
+    return origin;
+  // Places saved before origins were kept came from the browser.
+  const from = placesOf(settings)[0]?.from;
+  return from ? { ...from, source: "browser" } : null;
+}
+
 export function placesOf(settings: Settings | null): Place[] {
   const places = settings?.places;
   return Array.isArray(places) ? (places as unknown as Place[]) : [];
